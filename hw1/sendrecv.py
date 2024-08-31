@@ -1,4 +1,5 @@
 from collections import deque
+from zlib import crc32
 
 # Constants
 MAX_LENGTH = 1024
@@ -18,7 +19,6 @@ def got_separator_byte(the_bytes: bytearray) -> bool:
 def got_escape_byte(the_bytes: bytearray) -> bool:
     return the_bytes[-8:] == bytearray([1, 1, 1, 1, 1, 1, 1, 1])
 
-
 # Note: little-endian
 def bytes_to_bits(the_bytes):
     result = bytearray()
@@ -35,6 +35,9 @@ def bits_to_bytes(the_bits):
             current += (the_bits[i+j] << j)
         result.append(current)
     return result
+
+
+# Network Implementations
 
 class MySender:
     def __init__(self, channel):
@@ -63,22 +66,23 @@ class MyReceiver:
         # TODO unescape sequences starting with \0xFF
         # TODO checksum
 
-        # Decode escape sequences
-        if got_a_byte(self.recent_bits) and got_escape_byte(self.recent_bits) and not self.escaping:
-            # Read the escape byte and start an escape sequence
-            self.escaping = True
-        elif got_a_byte(self.recent_bits) and self.escaping:
-            # Finish an escape sequence
-            # TODO verify escape sequence
-            self.escaping = False
-            last_byte = bits_to_bytes(self.recent_bits[-8:])
-            self.message_bytes += last_byte
-        elif got_a_byte(self.recent_bits) and got_separator_byte(self.recent_bits) and not self.escaping:
-            # Read the separator byte and end the message
-            self.recent_bits.clear()
-            self.got_message_function(self.message_bytes)
-            self.message_bytes.clear()
-        elif got_a_byte(self.recent_bits):
-            # Read a normal character
-            last_byte = bits_to_bytes(self.recent_bits[-8:])
-            self.message_bytes += last_byte
+        if got_a_byte(self.recent_bits):
+            # Decode escape sequences
+            if got_escape_byte(self.recent_bits) and not self.escaping:
+                # Read the escape byte and start an escape sequence
+                self.escaping = True
+            elif self.escaping:
+                # Finish an escape sequence
+                # TODO verify escape sequence
+                self.escaping = False
+                last_byte = bits_to_bytes(self.recent_bits[-8:])
+                self.message_bytes += last_byte
+            elif got_separator_byte(self.recent_bits) and not self.escaping:
+                # Read the separator byte and end the message
+                self.recent_bits.clear()
+                self.got_message_function(self.message_bytes)
+                self.message_bytes.clear()
+            else:
+                # Read a normal character
+                last_byte = bits_to_bytes(self.recent_bits[-8:])
+                self.message_bytes += last_byte
