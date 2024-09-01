@@ -4,7 +4,6 @@ import struct
 
 from hw1.sendrecv import *
 from hw1.test import Channel
-from zlib import crc32
 
 if __name__ == '__main__':
     received_messages = []
@@ -14,9 +13,10 @@ if __name__ == '__main__':
     receiver = MyReceiver(lambda m: received_messages.append(bytes(m)))
 
     messages = [
+        b'',
         b'\x00\xAA\xFF',
         b'\xBB\x00\xFF',
-        b'\x00\xCC\xFF',
+        b'\xFF\xCC\x00' * 2,
     ]
 
     for msg in messages:
@@ -26,4 +26,4 @@ if __name__ == '__main__':
         receiver.handle_bit_from_network(b)
 
     for msg in received_messages:
-        print(msg)
+        print(f"msg = {msg}")
