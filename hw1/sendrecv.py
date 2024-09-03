@@ -14,16 +14,7 @@ SEPARATOR_CHAR = 0x00
 ESCAPE_CHAR = 0xFF
 CHECKSUM_SIZE_BITS = 32
 
-
-# Helper Functions
-def got_a_byte(the_bits: bytearray) -> bool:
-    return len(the_bits) % 8 == 0
-
-def got_separator_byte(the_bits: bytearray) -> bool:
-    return the_bits[-8:] == bytearray([0, 0, 0, 0, 0, 0, 0, 0])
-
-def got_escape_byte(the_bits: bytearray) -> bool:
-    return the_bits[-8:] == bytearray([1, 1, 1, 1, 1, 1, 1, 1])
+# Conversion Functions
 
 def bytes_to_bits(the_bytes: bytearray) -> bytearray:
     # Note: little-endian
@@ -67,13 +58,14 @@ class MySender:
         checksum = crc32(escaped_message)  # 4 bytes unsigned
         checksum_bytes = struct.pack('<L', checksum)
         # escaped_checksum = convert_to_escape(checksum_bytes)
-        print(f"cksm 1 = {checksum_bytes} = {checksum}")
+        # print(f"cksm 1 = {checksum_bytes} = {checksum}")
 
         # Send the checksum and the message
         # Don't need to separate/escape the checksum as it is always 4 bytes
         bytes_to_send = bytearray(checksum_bytes + escaped_message + bytes([SEPARATOR_CHAR]))
-        # print(f"send = {bytes_to_send}")
-        self.channel.send_bits(bytes_to_bits(bytes_to_send))
+        bits_to_send = bytes_to_bits(bytes_to_send)
+        print(f"sent = {bytes(bits_to_send)}")
+        self.channel.send_bits(bits_to_send)
 
 class MyReceiver:
     def __init__(self, got_message_function):
@@ -81,28 +73,43 @@ class MyReceiver:
         self.recent_bits = bytearray()  # the bits buffer
         self.escaping = False  # if reading escape sequence
         self.checksum = None  # the message checksum
-        # TODO recover from corrupt messages
+        self.recovering = False # recovering from corrupt message
+
+    # Helper Functions
+
+    def got_a_byte(self) -> bool:
+        return len(self.recent_bits) % 8 == 0
+
+    def got_separator_byte(self) -> bool:
+        return self.recent_bits[-8:] == bytearray([0, 0, 0, 0, 0, 0, 0, 0])
+
+    def got_escape_byte(self) -> bool:
+        return self.recent_bits[-8:] == bytearray([1, 1, 1, 1, 1, 1, 1, 1])
+
+    # Receiver Functions
 
     def handle_bit_from_network(self, the_bit):
         self.recent_bits.append(the_bit)
+
         # Read the checksum bit by bit
         if self.checksum is None:
             if len(self.recent_bits) >= CHECKSUM_SIZE_BITS:
                 self.finish_checksum()
+
         # Read the message byte by byte
-        elif got_a_byte(self.recent_bits):
-            if got_escape_byte(self.recent_bits) and not self.escaping:
+        elif self.got_a_byte():
+            if self.got_escape_byte() and not self.escaping:
                 # Read the escape byte and start an escape sequence
                 self.escaping = True
             elif self.escaping:
                 # Read a regular character and finish an escape sequence
-                # TODO verify escape sequence
                 self.escaping = False
-            elif got_separator_byte(self.recent_bits) and not self.escaping:
+            elif self.got_separator_byte() and not self.escaping:
                 # Read the separator byte and end the checksum/message
                 self.finish_message()
 
     def finish_checksum(self):
+        print(f"got = {bytes(self.recent_bits)}", end='')
         checksum_bytes = bits_to_bytes(self.recent_bits)
         self.recent_bits.clear()
 
@@ -110,13 +117,15 @@ class MyReceiver:
             self.checksum, = struct.unpack('<L', checksum_bytes)
         except struct.error:
             self.checksum = -1 # corrupted checksum, will not usually happen
-        print(f"cksm 2 = {checksum_bytes} = {self.checksum}")
+        # print(f"cksm 2 = {checksum_bytes} = {self.checksum}")
 
     def finish_message(self):
+        print(bytes(self.recent_bits))
         escaped_bytes = bits_to_bytes(self.recent_bits)[:-1]  # ignore separator
         self.recent_bits.clear()
 
         # De-escape message
+        # TODO verify escape sequence
         message_bytes = bytearray()
         escaping = False
 
