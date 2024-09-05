@@ -14,9 +14,8 @@ if __name__ == '__main__':
 
     messages = [
         b'',
-        b'\x00\xAA\xFF',
-        b'\xBB\x00\xFF',
-        b'\xFF\xCC\x00' * 2,
+        b'\x55',
+        b'\x55\x00' * 4,
     ]
 
     for msg in messages:
