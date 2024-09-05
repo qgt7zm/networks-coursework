@@ -1,6 +1,6 @@
 """
 Frame format:
-<checksum> (4 bytes) + <message> (variable bytes) + SEPARATOR_CHAR (1 byte)
+<checksum> (4 bytes) + <message> (variable bytes) + 010 (3 bits)
 """
 
 import struct
@@ -39,7 +39,7 @@ class MySender:
         self.channel = channel
 
     def send_message(self, message_bytes):
-        print(f"msg 1 = {message_bytes}")
+        # print(f"msg 1 = {message_bytes}")
 
         # Compute the checksum
         checksum = crc32(message_bytes)  # 4 bytes unsigned
@@ -48,7 +48,7 @@ class MySender:
 
         # Convert checksum/message to bits
         data_bits = bytes_to_bits(checksum_bytes + message_bytes)
-        print(f"bits 1 = {bytes(data_bits)}")
+        # print(f"bits 1 = {bytes(data_bits)}")
 
         # Escape checksum/message bits
         escaped_bits = bytearray()
@@ -62,7 +62,7 @@ class MySender:
 
         # Send the frame
         bits_to_send = bytearray(escaped_bits + SEPARATOR_BITS)
-        print(f"sent = {bytes(bits_to_send)}")
+        # print(f"sent = {bytes(bits_to_send)}")
         self.channel.send_bits(bits_to_send)
 
 class MyReceiver:
@@ -70,7 +70,6 @@ class MyReceiver:
         self.got_message_function = got_message_function
         self.recent_bits = bytearray()  # the bits buffer
         self.checksum = None  # the message checksum
-        self.recovering = False # recovering from corrupt message
 
     # Helper Functions
 
@@ -84,7 +83,7 @@ class MyReceiver:
 
         # Stop at the separator
         if len(self.recent_bits) >= 3 and self.got_separator_bits():
-            print(f"got = {bytes(self.recent_bits)}")
+            # print(f"got = {bytes(self.recent_bits)}")
 
             # Unescape the message
             escaped_bits = self.recent_bits[:-3]
@@ -100,25 +99,35 @@ class MyReceiver:
                 else:
                     data_bits.append(this_bit)
                 last_last_bit, last_bit = last_bit, this_bit
-            print(f"bits 2 = {bytes(data_bits)}")
+            # print(f"bits 2 = {bytes(data_bits)}, {len(data_bits)}")
 
             # Convert checksum/message to bytes
-            data_bytes = bits_to_bytes(data_bits)
+            if len(data_bits) % 8 != 0:
+                # Not enough bits for whole bits
+                data_bytes = bytearray()
+            else:
+                data_bytes = bits_to_bytes(data_bits)
 
+            # Read checksum
             checksum_bytes = data_bytes[:CHECKSUM_SIZE_BYTES]
-            self.checksum, = struct.unpack('<L', checksum_bytes)
+            if len(checksum_bytes) < CHECKSUM_SIZE_BYTES:
+                # Not enough bytes for checksum
+                self.checksum = -1
+            else:
+                self.checksum, = struct.unpack('<L', checksum_bytes)
             # print(f"cksm 2 = {self.checksum:#032b}")
 
+            # Read message
             message_bytes = data_bytes[CHECKSUM_SIZE_BYTES:]
-            print(f"msg 2 = {bytes(message_bytes)}")
 
             # Verify the checksum
             checksum_check = crc32(message_bytes)
             if checksum_check == self.checksum:
-                print(f"received {bytes(message_bytes)}")
+                # print(f"received msg 2 = {bytes(message_bytes)}")
                 self.got_message_function(message_bytes)
             else:
-                print(f"missed {bytes(message_bytes)}")
+                # print(f"missed msg 2 = {bytes(message_bytes)}")
+                pass
 
             self.checksum = None
             self.recent_bits.clear()
