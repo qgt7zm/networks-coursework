@@ -289,6 +289,7 @@ def get_results_for(
         maximum_size=None,
         verbose=False,
         only_subtests_matching=None,
+        ignore_too_many_bits=False,
     ):
     all_results = run_one(sender_cls, receiver_cls, distort_function, sent_messages, only_matching=only_subtests_matching)
     total_errors = 0
@@ -310,6 +311,8 @@ def get_results_for(
             errors += 1
         if maximum_size != None and all_results['original_bit_count'] > maximum_size * 8:
             cur_messages.append(f"ERROR --- used too many bytes to send messages ({all_results['original_bit_count']} versus threshold {maximum_size * 8})")
+            if not ignore_too_many_bits:
+                errors += 1
         if verbose:
             for item in results['compare_text']:
                 cur_messages.append(f"  {item}")
@@ -588,6 +591,9 @@ def main():
         help='only run tests matching a specified regular expression')
     parser.add_argument('--only-subtest', default=None, type=str,
         help='only run subtests matching a specified regular expression')
+    parser.add_argument('--ignore-too-many-bits',
+        default=False, action='store_true',
+        help='ignore errors from too many bits')
     parser.add_argument('--json', default=False, action='store_true',
         help='JSON-format output (for grading)')
     args = parser.parse_args()
@@ -611,6 +617,7 @@ def main():
             sender_cls=sender_cls, receiver_cls=receiver_cls,
             verbose=args.verbose,
             only_subtests_matching=args.only_subtest,
+            ignore_too_many_bits = args.ignore_too_many_bits,
             **test_args)
         if results[label]['total_errors'] > 0:
             failure = True

@@ -1,6 +1,6 @@
 """
 Frame format:
-<checksum> (4 bytes) + <message> (variable bytes) + 010 (3 bits)
+<checksum> (4 bytes) + <message> (variable bytes) + 01111110 (8 bits)
 """
 
 import struct
@@ -10,10 +10,16 @@ from zlib import crc32
 # Constants
 
 MAX_LENGTH = 1024
-SEPARATOR_BITS = bytes([0, 1, 0])
+SEPARATOR_BITS = bytearray([0, 1, 1, 1, 1, 1, 1, 0])
+SEPARATOR_LEN = len(SEPARATOR_BITS)
+SHOULD_ESCAPE_BITS = SEPARATOR_BITS[:-1]
+SHOULD_ESCAPE_LEN = len(SHOULD_ESCAPE_BITS)
 CHECKSUM_SIZE_BYTES = 4
 
-# Conversion Functions
+# Helper Functions
+
+def should_escape_bits(the_bits: bytearray) -> bool:
+    return the_bits[-SHOULD_ESCAPE_LEN:] == SHOULD_ESCAPE_BITS
 
 def bytes_to_bits(the_bytes: bytearray) -> bytearray:
     # Note: little-endian
@@ -48,20 +54,18 @@ class MySender:
 
         # Convert checksum/message to bits
         data_bits = bytes_to_bits(checksum_bytes + message_bytes)
-        # print(f"bits 1 = {bytes(data_bits)}")
+        # print(f"bits 1 = {bytes(data_bits)}, {len(data_bits)}")
 
         # Escape checksum/message bits
         escaped_bits = bytearray()
-        last_bit = None
-        for this_bit in data_bits:
-            escaped_bits.append(this_bit)
+        for bit in data_bits:
+            escaped_bits.append(bit)
             # If last two bits are "01", add another 1
-            if last_bit == 0 and this_bit == 1:
+            if should_escape_bits(escaped_bits):
                 escaped_bits.append(1)
-            last_bit = this_bit
 
         # Send the frame
-        bits_to_send = bytearray(escaped_bits + SEPARATOR_BITS)
+        bits_to_send = escaped_bits + SEPARATOR_BITS
         # print(f"sent = {bytes(bits_to_send)}")
         self.channel.send_bits(bits_to_send)
 
@@ -71,34 +75,29 @@ class MyReceiver:
         self.recent_bits = bytearray()  # the bits buffer
         self.checksum = None  # the message checksum
 
-    # Helper Functions
-
-    def got_separator_bits(self) -> bool:
-        return self.recent_bits[-3:] == bytearray([0, 1, 0])
-
     # Receiver Functions
 
     def handle_bit_from_network(self, the_bit):
         self.recent_bits.append(the_bit)
 
         # Stop at the separator
-        if len(self.recent_bits) >= 3 and self.got_separator_bits():
+        if self.recent_bits[-SEPARATOR_LEN:] == SEPARATOR_BITS:
             # print(f"got = {bytes(self.recent_bits)}")
 
             # Unescape the message
-            escaped_bits = self.recent_bits[:-3]
-
+            escaped_bits = self.recent_bits[:-SEPARATOR_LEN]
             data_bits = bytearray()
-            last_last_bit = None
-            last_bit = None
 
-            for this_bit in escaped_bits:
-                # If last two bits are "01" and this bit is "1", skip
-                if last_last_bit == 0 and last_bit == 1 and this_bit == 1:
-                    pass
+            escaping = False
+            for bit in escaped_bits:
+                # If last two bits are "01" and this bit is "1", skip once
+                if should_escape_bits(data_bits) and bit == 1 and not escaping:
+                    escaping = True
+                    continue
                 else:
-                    data_bits.append(this_bit)
-                last_last_bit, last_bit = last_bit, this_bit
+                    escaping = False
+                    data_bits.append(bit)
+
             # print(f"bits 2 = {bytes(data_bits)}, {len(data_bits)}")
 
             # Convert checksum/message to bytes
