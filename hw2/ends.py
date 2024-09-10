@@ -4,15 +4,17 @@ from util import Packet, Message, cancel_timer, create_timer, now, trace
 # Constants
 
 DEBUG = True  # Set this to false for autograder
-ACK_PACKET_DATA = b'ACK'
-INITIAL_SEQ_NUM = 0
 NO_ACK_MODE = 'no-ack'
 STOP_WAIT_MODE = 'one-zero'
 
+ACK_PACKET_DATA = b'ACK'
+INITIAL_SEQ_NUM = 0
+ALPHA = 0.2
+
 # Helper Functions
 
-def print_debug(msg: str | None) -> None:
-    if DEBUG and msg:
+def debug(msg: str | None) -> None:
+    if DEBUG and msg:  # Print if debug mode is on
         print(msg)
 
 # Class Implementations
@@ -22,6 +24,7 @@ class MySender:
         self.seq_num = INITIAL_SEQ_NUM  # seq num of current packet
         self.waiting = False  # waiting for ACK
         self.resend_timer = None  # timer to resend
+        self.avg_rtt = config.INITIAL_TIMEOUT  # average RTT
 
     # Network Functions
 
@@ -46,10 +49,18 @@ class MySender:
             if packet.ack_num != self.seq_num:  # make sure ACK has correct seq num
                 return
 
-            print_debug(f"sender got ACK {packet.ack_num}")
+            debug(f"sender got ACK {packet.ack_num}")
+
+            # Calculate new average RTT
+            rtt = now() - packet.timestamp
+            debug(f"rtt = {rtt}")
+            self.avg_rtt = rtt * ALPHA + self.avg_rtt * (1 - ALPHA)
+            debug(f"new avg = {self.avg_rtt}")
+
+            # Get the next message
             self.waiting = False
             self.seq_num = 1 - self.seq_num  # flip the sequence bit
-            self.ready_for_more_from_application()  # get the next message
+            self.ready_for_more_from_application()
 
     # Helper Functions
 
@@ -58,15 +69,16 @@ class MySender:
             return
         self.send_packet(packet, f"sender resent {packet.seq_num}")
 
-    def send_packet(self, packet: Packet, debug: str=None):
+    def send_packet(self, packet: Packet, msg: str=None):
+        packet.timestamp = now()
         self.to_network(packet)
-        print_debug(debug)
+        debug(msg)
 
         # Start/reset wait timer
         if self.resend_timer:
             cancel_timer(self.resend_timer)
         self.resend_timer = create_timer(
-            config.INITIAL_TIMEOUT,
+            self.avg_rtt * 2.0,
             lambda: self.resend_packet(packet),
             f"resend {packet.seq_num}"
         )
@@ -86,22 +98,22 @@ class MyReceiver:
         elif config.MODE == STOP_WAIT_MODE:
             if packet.seq_num != self.last_seq_num:  # forward new messages
                 self.to_application(message)
-                print_debug(f"receiver got {packet.seq_num}")
+                debug(f"receiver got {packet.seq_num}")
 
                 self.last_seq_num = packet.seq_num
                 self.seq_num = 1 - self.seq_num  # flip the sequence bit
 
                 # Send ACK
-                self.send_ack(packet.is_end, packet.seq_num, f"receiver sent ACK {packet.seq_num}")
+                self.send_ack(packet, f"receiver sent ACK {packet.seq_num}")
             else:  # don't forward duplicate messages
-                print_debug(f"receiver got duplicate {packet.seq_num}")
+                debug(f"receiver got duplicate {packet.seq_num}")
 
                 # Resend ACK
-                self.send_ack(packet.is_end, self.last_seq_num, f"receiver resent ACK {packet.seq_num}")
+                self.send_ack(packet, f"receiver resent ACK {packet.seq_num}")
 
     # Helper Functions
 
-    def send_ack(self, is_end:bool, ack_num: int, debug: str=None):
-        ack_packet = Packet(data=ACK_PACKET_DATA, is_end=is_end, ack_num=ack_num)
+    def send_ack(self, packet:Packet, msg: str=None):
+        ack_packet = Packet(data=ACK_PACKET_DATA, is_end=packet.is_end, ack_num=packet.seq_num, timestamp=packet.timestamp)
         self.to_network(ack_packet)
-        print_debug(debug)
+        debug(msg)
