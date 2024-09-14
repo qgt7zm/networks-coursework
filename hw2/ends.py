@@ -3,9 +3,8 @@ from util import Packet, Message, cancel_timer, create_timer, now, trace
 
 # Constants
 
-DEBUG = True  # Set this to false for autograder
 NO_ACK_MODE = 'no-ack'
-STOP_WAIT_MODE = 'one-zero'
+STOP_AND_WAIT = 'one-zero'
 
 ACK_PACKET_DATA = b'ACK'
 INITIAL_SEQ_NUM = 0
@@ -14,8 +13,8 @@ ALPHA = 0.2
 # Helper Functions
 
 def debug(msg: str | None) -> None:
-    if DEBUG and msg:  # Print if debug mode is on
-        print(msg)
+    if msg:  # Print if debug mode is on
+        trace('debug', msg)
 
 # Class Implementations
 
@@ -33,7 +32,7 @@ class MySender:
 
         if config.MODE == NO_ACK_MODE:
             self.to_network(packet)
-        elif config.MODE == STOP_WAIT_MODE:
+        elif config.MODE == STOP_AND_WAIT:
             if self.waiting:  # don't send if waiting
                 return False
 
@@ -95,7 +94,7 @@ class MyReceiver:
 
         if config.MODE == NO_ACK_MODE:
             self.to_application(message)
-        elif config.MODE == STOP_WAIT_MODE:
+        elif config.MODE == STOP_AND_WAIT:
             if packet.seq_num != self.last_seq_num:  # forward new messages
                 self.to_application(message)
                 debug(f"receiver got {packet.seq_num}")

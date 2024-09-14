@@ -1,4 +1,4 @@
-## all the options here can be overriden on the command-line
+## all the options here can be overridden on the command-line
 
 """one of 'no-ack', 'one-zero', 'sliding', 'variable-sliding'"""
 MODE = 'no-ack'
@@ -18,5 +18,5 @@ INITIAL_TIMEOUT = 100
 """types of events to output trace info for.
 
 'all' matches all event, otherwise, name listed much last type passed as first arg to trace() function."""
-TRACE = set([])
+TRACE = set(['debug'])
 
