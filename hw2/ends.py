@@ -53,11 +53,11 @@ class MySender:
 
             if window_start <= window_end:  # window is normal
                 if seq_num > window_end or seq_num < window_start:
-                    debug(f"did not send {seq_num}")
+                    # debug(f"did not send {seq_num}")
                     return False
             else:  # window is split
                 if window_end < seq_num < window_start:
-                    debug(f"did not send {seq_num}")
+                    # debug(f"did not send {seq_num}")
                     return False
 
             self.send_packet(packet, f"sender sent {seq_num} {message.data}")
@@ -70,8 +70,8 @@ class MySender:
 
         # Calculate new average RTT
         rtt = now() - packet.timestamp
-        # debug(f"rtt = {rtt}")
         self.avg_rtt = rtt * ALPHA + self.avg_rtt * (1 - ALPHA)
+        # debug(f"rtt = {rtt}")
         # debug(f"new avg = {self.avg_rtt}")
 
         if config.MODE == STOP_AND_WAIT_MODE:
@@ -85,18 +85,27 @@ class MySender:
             self.seq_num = 1 - self.seq_num  # flip the sequence bit
             self.ready_for_more_from_application()
         elif config.MODE == SLIDING_WINDOW_MODE:
-            debug(f"sender got ACK {packet.ack_num}")
+            ack_num = packet.ack_num
+            debug(f"sender got ACK {ack_num}")
+
+            # Cancel timers
+            for i in range(self.last_acked + 1, ack_num + 1):
+                self.cancel_timer(i)
 
             # Update window
             self.last_acked = packet.ack_num
-
             window_start = (self.last_acked + 1) % config.MAXIMUM_SEQUENCE
             window_end = (self.last_acked + config.INITIAL_WINDOW) % config.MAXIMUM_SEQUENCE
             debug(f"sender window {window_start}-{window_end}")
 
+            # Get the next packet
             self.ready_for_more_from_application()
 
     # Helper Functions
+
+    def cancel_timer(self, seq_num: int) -> None:
+        if seq_num in self.timers.keys():
+            cancel_timer(self.timers.pop(seq_num))
 
     def resend_packet(self, packet: Packet) -> None:
         seq_num = packet.seq_num
@@ -104,18 +113,18 @@ class MySender:
         if config.MODE == STOP_AND_WAIT_MODE and not self.waiting:  # don't resend if not waiting for ACK
             return
         elif config.MODE == SLIDING_WINDOW_MODE:  # don't resend if discarded
-            window_start = self.last_acked + 1
-            window_end = self.last_acked + config.INITIAL_WINDOW
+            window_start = (self.last_acked + 1) % config.MAXIMUM_SEQUENCE
+            window_end = (self.last_acked + config.INITIAL_WINDOW) % config.MAXIMUM_SEQUENCE
 
             if window_start <= window_end:  # window is normal
                 if seq_num < window_start:
-                    debug(f"don't resend {packet.seq_num}")
+                    # debug(f"don't resend {packet.seq_num}")
                     return
             else:  # window is split
                 if window_end < seq_num < window_start:
-                    debug(f"don't resend {packet.seq_num}")
+                    # debug(f"don't resend {packet.seq_num}")
                     return
-        self.send_packet(packet, f"sender resent {packet.seq_num}")
+        self.send_packet(packet, f"sender resent {packet.seq_num} {packet.data}")
 
     def send_packet(self, packet: Packet, msg: str=None, timer: bool=True) -> None:
         packet.timestamp = now()
@@ -136,8 +145,7 @@ class MySender:
             if timer:
                 self.resend_timer = packet_timer
         elif config.MODE == SLIDING_WINDOW_MODE:
-            if seq_num in self.timers.keys():
-                cancel_timer(self.timers.pop(seq_num))
+            self.cancel_timer(seq_num)
             if timer:
                 self.timers[seq_num] = packet_timer
 
