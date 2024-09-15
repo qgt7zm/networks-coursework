@@ -28,6 +28,7 @@ class MySender:
         self.last_acked = -1  # LAR
         self.last_sent = -1  # LFS
         self.timers = {}  # for resending packets not ACKed
+        # Window = [LAR + 1, LAR + SWS]
 
     # Network Functions
 
@@ -45,8 +46,8 @@ class MySender:
         elif config.MODE == SLIDING_WINDOW_MODE:
             packet = Packet(data=message.data, is_end=message.is_end, seq_num=self.last_sent + 1)
 
-            # Check if packet is in window
-            window_start = max(0, self.last_acked)  # edge case for first frame
+            # Don't send if packet is after window
+            window_start = self.last_acked + 1
             if packet.seq_num >= window_start + config.INITIAL_WINDOW:
                 return False
 
@@ -108,8 +109,7 @@ class MySender:
         elif config.MODE == SLIDING_WINDOW_MODE:
             seq_num = packet.seq_num
             if seq_num in self.timers.keys():
-                cancel_timer(self.timers[seq_num])
-                self.timers.pop(seq_num)
+                cancel_timer(self.timers.pop(seq_num))
             if timer:
                 self.timers[seq_num] = create_timer(
                     self.avg_rtt * 2.0,
@@ -123,6 +123,8 @@ class MyReceiver:
         self.last_seq_num = None  # seq num of last received packet
         self.last_received = -1  # LFR
         self.last_accepted = -1  # LAF
+        self.recent_packets = {}
+        # Window = [LFR + 1, LAF]
 
     # Network Functions
 
@@ -150,21 +152,41 @@ class MyReceiver:
                 self.send_ack(packet, f"receiver resent ACK {packet.seq_num}")
         elif config.MODE == SLIDING_WINDOW_MODE:
             # Ignore packet if out of window
-            window_start = max(0, self.last_received)  # edge case for first frame
-            if packet.seq_num not in range(window_start, window_start + config.INITIAL_WINDOW):
+            window_start = self.last_received + 1
+            window_end = max(self.last_received + config.INITIAL_WINDOW, self.last_accepted)  # edge case for first frame
+            if packet.seq_num > window_end:
+                debug(f"receiver got {packet.seq_num} outside window {window_start}-{window_end}")
                 return
+            elif packet.seq_num < window_start:
+                # Resend missing ACKs even if packet out of window
+                self.send_ack(packet, f"receiver resent ACK {self.last_received}")
 
-            # Check if packet is next in sequence
-            if packet.seq_num == self.last_received + 1:
+            # Reply if packet is next in sequence
+            if packet.seq_num == window_start:
                 self.to_application(message)
                 debug(f"receiver got {packet.seq_num}")
-
-                # Send ACK
-                self.send_ack(packet, f"receiver sent ACK {packet.seq_num}")
                 self.last_received += 1
-            # Resend missing ACKs
-            elif packet.seq_num <= self.last_received:
-                self.send_ack(packet, f"receiver resent ACK {self.last_received}")
+
+                # Find last in-order packet stored
+                for i in range(self.last_received + 1, self.last_accepted + 1):
+                    if i not in self.recent_packets.keys():
+                        break
+
+                    # Send packet to application
+                    packet = self.recent_packets.pop(i)
+                    message = Message(data=packet.data, is_end=packet.is_end)
+                    self.to_application(message)
+                    self.last_received += 1
+                    debug(f"receiver popped {packet.seq_num}")
+
+                # Send latest ACK and update window
+                self.send_ack(packet, f"receiver sent ACK {packet.seq_num}")
+                self.last_accepted = self.last_received + config.INITIAL_WINDOW
+                debug(f"receiver set window {self.last_received + 1}-{self.last_accepted}")
+            # Store packet if out-of-order
+            elif packet.seq_num > window_start:
+                self.recent_packets[packet.seq_num] = packet
+                debug(f"receiver got out-of-order {packet.seq_num}, window {window_start}-{window_end}")
 
     # Helper Functions
 
