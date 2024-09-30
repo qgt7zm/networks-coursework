@@ -9,6 +9,7 @@ SLIDING_WINDOW_MODE = 'sliding-window'
 
 ACK_PACKET_DATA = b'ACK'
 INITIAL_SEQ_NUM = 0
+INITIAL_LAST_SEQ_NUM = -1
 ALPHA = 0.2
 
 # Helper Functions
@@ -25,8 +26,8 @@ class MySender:
         self.waiting = False  # waiting for ACK
         self.resend_timer = None  # timer to resend
         self.avg_rtt = config.INITIAL_TIMEOUT  # average RTT
-        self.last_acked = -1  # LAR
-        self.last_sent = -1  # LFS
+        self.last_acked = INITIAL_LAST_SEQ_NUM  # LAR
+        self.last_sent = INITIAL_LAST_SEQ_NUM # LFS
         self.timers = {}  # for resending packets not ACKed
         # Window = [LAR + 1, LAR + SWS]
 
@@ -48,8 +49,7 @@ class MySender:
             packet = Packet(data=message.data, is_end=message.is_end, seq_num=seq_num)
 
             # Don't send if packet is after window
-            window_start = (self.last_acked + 1) % config.MAXIMUM_SEQUENCE
-            window_end = (self.last_acked + config.INITIAL_WINDOW) % config.MAXIMUM_SEQUENCE
+            window_start, window_end = self.get_send_window()
 
             if window_start <= window_end:  # window is normal
                 if seq_num > window_end or seq_num < window_start:
@@ -94,14 +94,18 @@ class MySender:
 
             # Update window
             self.last_acked = packet.ack_num
-            window_start = (self.last_acked + 1) % config.MAXIMUM_SEQUENCE
-            window_end = (self.last_acked + config.INITIAL_WINDOW) % config.MAXIMUM_SEQUENCE
+            window_start, window_end = self.get_send_window()
             debug(f"sender window {window_start}-{window_end}")
 
             # Get the next packet
             self.ready_for_more_from_application()
 
     # Helper Functions
+
+    def get_send_window(self) -> tuple:
+        window_start = (self.last_acked + 1) % config.MAXIMUM_SEQUENCE
+        window_end = (self.last_acked + config.INITIAL_WINDOW) % config.MAXIMUM_SEQUENCE
+        return window_start, window_end
 
     def cancel_timer(self, seq_num: int) -> None:
         if seq_num in self.timers.keys():
@@ -113,8 +117,8 @@ class MySender:
         if config.MODE == STOP_AND_WAIT_MODE and not self.waiting:  # don't resend if not waiting for ACK
             return
         elif config.MODE == SLIDING_WINDOW_MODE:  # don't resend if discarded
-            window_start = (self.last_acked + 1) % config.MAXIMUM_SEQUENCE
-            window_end = (self.last_acked + config.INITIAL_WINDOW) % config.MAXIMUM_SEQUENCE
+            window_start, window_end = self.get_send_window()
+            debug(f"timeout [{window_start}, {window_end}], L{self.last_sent}, #{seq_num}")
 
             if window_start <= window_end:  # window is normal
                 if seq_num < window_start:
@@ -153,7 +157,7 @@ class MyReceiver:
     def __init__(self):
         self.seq_num = INITIAL_SEQ_NUM  # seq num of expected packet
         self.last_seq_num = None  # seq num of last received packet
-        self.last_received = -1  # LFR
+        self.last_received = INITIAL_LAST_SEQ_NUM  # LFR
         self.last_accepted = self.last_received + config.INITIAL_WINDOW  # LAF
         self.recent_packets = {}  # packets received out-of-order
         # Window = [LFR + 1, LAF]
@@ -183,8 +187,7 @@ class MyReceiver:
                 # Resend ACK
                 self.send_ack(packet, f"receiver resent ACK {packet.seq_num}")
         elif config.MODE == SLIDING_WINDOW_MODE:
-            window_start = (self.last_received + 1) % config.MAXIMUM_SEQUENCE
-            window_end = self.last_accepted
+            window_start, window_end = self.get_receive_window()
             seq_num = packet.seq_num
 
             # Ignore packet if out of window
@@ -221,8 +224,7 @@ class MyReceiver:
                 self.last_received = packet.seq_num
                 self.last_accepted = (self.last_received + config.INITIAL_WINDOW) % config.MAXIMUM_SEQUENCE
 
-                window_start = (self.last_received + 1) % config.MAXIMUM_SEQUENCE
-                window_end = self.last_accepted
+                window_start, window_end = self.get_receive_window()
                 if window_start <= window_end:  # if window is normal
                     debug(f"receiver window {window_start}-{window_end}")
                 else:  # if window is split
@@ -233,6 +235,11 @@ class MyReceiver:
                 debug(f"receiver got out-of-order {seq_num}, window {window_start}-{window_end}")
 
     # Helper Functions
+
+    def get_receive_window(self) -> tuple:
+        window_start = (self.last_received + 1) % config.MAXIMUM_SEQUENCE
+        window_end = self.last_accepted
+        return window_start, window_end
 
     def send_ack(self, packet:Packet, msg: str=None):
         ack_packet = Packet(data=ACK_PACKET_DATA, is_end=packet.is_end, ack_num=packet.seq_num, timestamp=packet.timestamp)
