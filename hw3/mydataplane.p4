@@ -151,6 +151,21 @@ control MyIngress(inout headers hdr,
             0
         );
     }
+    
+    /*
+     * Table to store source MAC addresses.
+     */
+    table mac_src_lpm {
+        key = {
+            hdr.ethernet.srcAddr : lpm;
+        }
+        actions = {
+            copy_to_controller;
+            NoAction;
+        }
+        size = 1024;
+        default_action = copy_to_controller;
+    }
 
     /*
      * Table to decide what to do with packets based on their destination ethernet addresses.
@@ -176,10 +191,8 @@ control MyIngress(inout headers hdr,
 
 
     apply {
-        // TODO:
-            // add code here to run copy_to_controller()
-            // ideally, this would be done with a table to avoid copying to controller
-            // for uninteresting packets
+        // copy_to_controller();
+        mac_src_lpm.apply();
         mac_dst_lpm.apply();
     }
 }

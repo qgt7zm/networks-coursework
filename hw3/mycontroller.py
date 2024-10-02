@@ -42,11 +42,77 @@ def process_packet(p4info_helper, switch, packet):
         switch,
         packet.metadata
     )
-    print(f"Controller metadata = {metadata}")
-    print("Packet dump")
-    frame.show()
+    # print(f"Controller metadata = {metadata}")
+    # print("Packet dump")
+    # frame.show()
+    
+    print(f"Src = {frame.src}")
+    print(f"Dest = {frame.dst}")
+    print(f"Port = {metadata['inPort'][0]}")
+    print(f"Version = {frame.version}")
     print("-----------------------------")
     print("")
+
+    # Hardcode a table entry for h1
+    """
+    write_or_overwrite_table_entry(
+        p4info_helper=p4info_helper,
+        switch=switch,
+        table_name='MyIngress.mac_dst_lpm',
+        match_fields={
+            # first 48 bits match this MAC address
+            'hdr.ethernet.dstAddr': ('08:00:00:00:01:01', 48),
+        },
+        action_name='MyIngress.forward_to_port',
+        action_params={
+            'port': 1,
+        }
+    )
+    """
+    
+    # Attempt to filter out extraneous IPv6 packets
+    # Not working
+    if frame.version == 4:
+        # print("Forwarding IPv4 packet")
+        key = frame.src
+        action_name = 'MyIngress.forward_to_port'
+        action_params = {
+            'port': metadata['inPort'][0]
+        }
+    else:
+        # print("Dropping IPv6 packet")
+        key = frame.dst
+        action_name = 'NoAction'
+        action_params = {}
+
+    # Dynamically update the tables
+
+    # Make sure each host only receives packets meant for it
+    write_or_overwrite_table_entry(
+        p4info_helper=p4info_helper,
+        switch=switch,
+        table_name='MyIngress.mac_dst_lpm',
+        match_fields={
+            # first 48 bits match this MAC address
+            'hdr.ethernet.dstAddr': (frame.src, 48),
+        },
+        action_name=action_name,
+        action_params=action_params
+    )
+
+    # Limit how many packets the controller receives from pings
+    write_or_overwrite_table_entry(
+        p4info_helper=p4info_helper,
+        switch=switch,
+        table_name='MyIngress.mac_src_lpm',
+        match_fields={
+            # first 48 bits match this MAC address
+            'hdr.ethernet.srcAddr': (frame.src, 48),
+        },
+        action_name='NoAction',
+        action_params={
+        }
+    )
 
 def main(p4info_file_path, bmv2_file_path):
     """
