@@ -34,15 +34,33 @@ class MySender:
         self.output_file = open('last-window-sizes.csv', 'w')
         self.output_file.write('time,window\n')
 
-    def _do_send_packet(self, packet):
+    def _do_adjust_window(self, window_size: int):
+        self.window_size = window_size
+        self.last_adjust_time = now()
+        self.output_file.write(f'{self.last_adjust_time},{window_size}\n')
+        trace('sender', f'set window size to {self.window_size}')
+
+    def _do_resend_packet(self, packet: Packet):
+        trace('sender', f'timeout for packet {packet.seq_num}')
+        # Decrease window size
+        new_window_size = max(self.window_size // 2, 1)
+        if self.window_size > 1:
+            self._do_adjust_window(new_window_size)
+
+        # TODO don't decrease again until recovering
+        # TODO don't resend if outside window
+        self._do_send_packet(packet)
+
+    def _do_send_packet(self, packet: Packet):
         self.to_network(packet)
         self.queue[packet.seq_num] = \
             SendPacketInfo(
                 packet=packet,
-                timer=create_timer(config.INITIAL_TIMEOUT, lambda: self._do_send_packet(packet)),
+                timer=create_timer(config.INITIAL_TIMEOUT, lambda: self._do_resend_packet(packet)),
             )
+        trace('sender', f'sent packet {packet.seq_num}')
 
-    def from_application(self, message):
+    def from_application(self, message: Message) -> bool:
         missing_count = _delta(self.last_ack_received, self.last_frame_sent)
         trace('sender', f'missing_count = {missing_count}')
 
@@ -59,7 +77,7 @@ class MySender:
             self._do_send_packet(packet)
             return True
 
-    def from_network(self, packet):
+    def from_network(self, packet: Packet):
         trace('sender', f'sender from_network (initially): LAR={self.last_ack_received} LFS={self.last_frame_sent} window={self.window_size}')
 
         # Checking > max window size because _delta can't return negative numbers,
@@ -75,6 +93,14 @@ class MySender:
                 if item is not None and item.timer is not None:
                     cancel_timer(item.timer)
 
+        # Increase window size
+        current_time = now()
+        if current_time - self.last_adjust_time >= config.INITIAL_TIMEOUT:
+            new_window_size = self.window_size + 1
+            if new_window_size <= config.MAXIMUM_WINDOW:
+                self._do_adjust_window(new_window_size)
+
+        # Check for new packets
         missing_count = _delta(self.last_ack_received, self.last_frame_sent)
         trace('sender', f'sender from_network (after processing): LAR={self.last_ack_received} LFS={self.last_frame_sent} window={self.window_size}')
         if missing_count < self.window_size:
@@ -86,7 +112,7 @@ class MyReceiver:
         self.last_ack_sent = config.MAXIMUM_SEQUENCE
         self.queue = {}
 
-    def from_network(self, packet):
+    def from_network(self, packet: Packet):
         trace('receiver', f'from_network: LFR={self.last_frame_received} (next: {_next(self.last_frame_received)}) LAS={self.last_ack_sent}')
 
         if _delta(self.last_frame_received, packet.seq_num) > config.MAXIMUM_WINDOW or \
