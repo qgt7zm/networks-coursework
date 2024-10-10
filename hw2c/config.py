@@ -1,7 +1,7 @@
 ## all the options here can be overriden on the command-line
 
-"""one of 'no-ack', 'one-zero', 'sliding', 'variable-sliding'"""
-MODE = 'no-ack'
+"""one of 'no-ack', 'one-zero', 'sliding-window', 'variable-sliding'"""
+MODE = 'variable-sliding'
 
 """initial window size for 'sliding' and 'variable-sliding' mode"""
 INITIAL_WINDOW = 5
@@ -18,5 +18,5 @@ INITIAL_TIMEOUT = 100
 """types of events to output trace info for.
 
 'all' matches all event, otherwise, name listed much last type passed as first arg to trace() function."""
-TRACE = set([])
+TRACE = {'sender', 'receiver'}
 
