@@ -123,16 +123,20 @@ class WeightedFairQueuingBuffer:
         return len(self._queue1) + len(self._queue2)
 
     def enqueue(self, packet: Packet):
+        # Packet from c1
+        if packet.label == 'c1':
+            own_queue = self._queue1
+            other_queue = self._queue2
+        # Packet from c2
+        else:
+            own_queue = self._queue2
+            other_queue = self._queue1
+
         # Queue has room
         if self._queue_length() < self._capacity:
-            # Packet from c1
-            if packet.label == 'c1':
-                sub_queue = self._queue1
-            # Packet from c2
-            else:
-                sub_queue = self._queue2
+            sub_queue = own_queue
 
-            # Calculate last finish time
+            # Calculate next finish time
             current_finish = sub_queue.last_finish_time + packet.size / sub_queue.weight
             sub_queue.append((packet, current_finish))
 
@@ -141,25 +145,15 @@ class WeightedFairQueuingBuffer:
             sub_queue.last_finish_time = current_finish
         # Queue is full
         else:
-            # Packet from c1
-            if packet.label == 'c1':
-                own_queue = self._queue1
-                other_queue = self._queue2
-            # Packet from c2
-            else:
-                own_queue = self._queue2
-                other_queue = self._queue1
-
             # Compare last finish times
             current_finish = own_queue.last_finish_time + packet.size / own_queue.weight
             other_finish = other_queue.last_finish_time
 
-            # Replace with the new packet
-            if current_finish < other_finish:
-                if len(other_queue) > 0:
-                    packet_replace, other_finish = other_queue.pop()
-                    other_queue.last_finish_time -= packet.size / other_queue.weight
-                    trace('buffer-drop', f'replacing ({other_finish}) packet from {packet_replace.label} to {self._label} due to full buffer')
+            # Replace other with the new packet
+            if current_finish < other_finish and len(other_queue) > 0:
+                packet_replace, _ = other_queue.pop()
+                other_queue.last_finish_time -= packet_replace.size / other_queue.weight
+                trace('buffer-drop', f'replacing ({other_finish}) packet from {packet_replace.label} to {self._label} due to full buffer')
 
                 own_queue.append((packet, current_finish))
                 own_queue.last_finish_time = current_finish
