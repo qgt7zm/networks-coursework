@@ -13,18 +13,19 @@ class DropTailBuffer:
 
     def enqueue(self, packet: Packet):
         if len(self._queue) < self._capacity:
-            trace('buffer-enqueue', f'buffering #{packet.seq_num} from {packet.label} to {self._label} (buffer size {self._size_in_buffer}/{self._capacity})')
+            trace('buffer-enqueue', f'buffering packet from {packet.label} to {self._label} (buffer size {self._size_in_buffer}/{self._capacity})')
             self._queue.append(packet)
+            self._size_in_buffer += 1
         else:
-            trace('buffer-drop', f'dropping #{packet.seq_num} from {packet.label} to {self._label} due to full buffer')
+            trace('buffer-drop', f'dropping packet from {packet.label} to {self._label} due to full buffer')
 
     def dequeue(self) -> Packet | None:
         if len(self._queue) == 0:
             return None
         else:
             packet = self._queue.popleft()
-            self._size_in_buffer -= packet.size
-            trace('buffer-dequeue', f'unbuffering #{packet.seq_num} from {packet.label} for {self._label}')
+            self._size_in_buffer -= 1
+            trace('buffer-dequeue', f'unbuffering packet from {packet.label} for {self._label} (buffer size {self._size_in_buffer}/{self._capacity})')
             return packet
 
 
@@ -43,20 +44,27 @@ class PriorityQueueBuffer:
     def enqueue(self, packet: Packet):
         # Queue has room
         if self._queue_length() < self._capacity:
-            trace('buffer-enqueue', f'buffering #{packet.seq_num} from {packet.label} to {self._label} (buffer size {self._size_in_buffer}/{self._capacity})')
             # Packet from c1
             if packet.label == 'c1':
                 self._queue1.append(packet)
             # Packet from c2
-            elif packet.label == 'c2':
+            else:
                 self._queue2.append(packet)
+
+            self._size_in_buffer += 1
+            trace('buffer-enqueue', f'buffering packet from {packet.label} to {self._label} (buffer size {self._size_in_buffer}/{self._capacity})')
         # Queue is full
         else:
-            # Replace last from c2
-            if len(self._queue2) > 0:
+            # Replace last from c2 with last from c1
+            if len(self._queue2) > 0 and packet.label == 'c1':
+                packet_replace = self._queue2.pop()
+                trace('buffer-drop', f'replacing packet from {packet_replace.label} to {self._label} due to full buffer')
+
                 self._queue1.append(packet)
-                packet = self._queue2.pop()
-            trace('buffer-drop', f'dropping #{packet.seq_num} from {packet.label} to {self._label} due to full buffer')
+                trace('buffer-enqueue',f'buffering packet from {packet.label} to {self._label} (buffer size {self._size_in_buffer}/{self._capacity})')
+            # Drop last from c1/c2
+            else:
+                trace('buffer-drop', f'dropping packet from {packet.label} to {self._label} due to full buffer')
 
     def dequeue(self) -> Packet | None:
         # Queue is empty
@@ -70,6 +78,7 @@ class PriorityQueueBuffer:
             # Pop from c2
             else:
                 packet = self._queue2.popleft()
-            self._size_in_buffer -= packet.size
-            trace('buffer-dequeue', f'unbuffering #{packet.seq_num} from {packet.label} for {self._label}')
+
+            self._size_in_buffer -= 1
+            trace('buffer-dequeue', f'unbuffering packet from {packet.label} for {self._label} (buffer size {self._size_in_buffer}/{self._capacity})')
             return packet
