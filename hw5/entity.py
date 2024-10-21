@@ -71,20 +71,22 @@ class Entity:
         Return Value: This function should return an array of `Packet`s to be
         sent from this entity (if any) to neighboring entities.
         '''
-        # print(f"Self: {self.index}")
+        print(f"Self: {self.index}")
 
-        # Add neighbor costs
+        # Set own entry
+        self.cost_table[self.index] = 0
+        self.next_hop_table[self.index] = self.index
+
+        # Set neighbor entries
         for k, v in neighbor_costs:
-            self.neighbor_cost_map[k] = v
             # print(f"- To = {k}, Cost = {v}")
+            self.cost_table[k] = v
+            self.next_hop_table[k] = k
+            self.neighbor_cost_map[k] = v
 
         # Get all costs in table
-        costs = []
-        for i in range(self.number_of_entities):
-            if i == self.index:
-                costs.append(0)  # cost to self is 0
-            else:
-                costs.append(self.neighbor_cost_map[i])  # cost to neighbor
+        costs = [cost for _, cost in self.get_all_costs()]
+        print(f"- Initial Costs = {costs}")
 
         # Send packets to direct neighbors
         packets = []
@@ -103,14 +105,13 @@ class Entity:
         sent from this entity (if any) to neighboring entities.
         '''
         source = pkt.get_source()
-        print(f"Self: {self.index}")
 
         for destination, cost in enumerate(pkt.get_costs()):
             # Calculate path cost
-            print(f"- Got: From = {source}, To = {destination}, Cost = {cost}")
+            # print(f"- Got: From = {source}, To = {destination}, Cost = {cost}")
             old_path_cost = self.cost_table[destination]
             new_path_cost = self.neighbor_cost_map[source] + cost
-            print(f"- Old = {old_path_cost}, New = {new_path_cost}")
+            # print(f"- Old = {old_path_cost}, New = {new_path_cost}")
 
             # Update routing table
             if new_path_cost < old_path_cost:
