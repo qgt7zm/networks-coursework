@@ -71,12 +71,12 @@ class Entity:
         Return Value: This function should return an array of `Packet`s to be
         sent from this entity (if any) to neighboring entities.
         '''
-        print(f"Self = {self.index}")
+        # print(f"Self: {self.index}")
 
         # Add neighbor costs
         for k, v in neighbor_costs:
             self.neighbor_cost_map[k] = v
-            print(f"- To {k}: Cost {v}")
+            # print(f"- To = {k}, Cost = {v}")
 
         # Get all costs in table
         costs = []
@@ -103,8 +103,19 @@ class Entity:
         sent from this entity (if any) to neighboring entities.
         '''
         source = pkt.get_source()
+        print(f"Self: {self.index}")
+
         for destination, cost in enumerate(pkt.get_costs()):
-            pass # FIXME part 1: do some sort of update
+            # Calculate path cost
+            print(f"- Got: From = {source}, To = {destination}, Cost = {cost}")
+            old_path_cost = self.cost_table[destination]
+            new_path_cost = self.neighbor_cost_map[source] + cost
+            print(f"- Old = {old_path_cost}, New = {new_path_cost}")
+
+            # Update routing table
+            if new_path_cost < old_path_cost:
+                self.cost_table[destination] = new_path_cost
+                self.next_hop_table[destination] = source
 
         # FIXME part 1: return array of packets to send to neighbors for needed updates
         return []
