@@ -65,7 +65,7 @@ def run_test(
             trigger_periodic_updates=trigger_periodic_updates,
             seed=seed, debug=debug,
         )
-    except e:
+    except Exception:
         import traceback
         traceback.print_exc(file=out_fh)
         actual_next_hops = None

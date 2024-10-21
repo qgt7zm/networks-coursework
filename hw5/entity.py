@@ -17,7 +17,7 @@ class Entity:
     def __init__(self, entity_index, number_entities):
         '''
         This initialization function will be called at the beginning of the
-        simulation to setup all entities.
+        simulation to set up all entities.
 
         The skeleton code version of this method sets some convenient instance
         variables you may find useful:
@@ -71,11 +71,26 @@ class Entity:
         Return Value: This function should return an array of `Packet`s to be
         sent from this entity (if any) to neighboring entities.
         '''
+        print(f"Self = {self.index}")
+
+        # Add neighbor costs
         for k, v in neighbor_costs:
             self.neighbor_cost_map[k] = v
+            print(f"- To {k}: Cost {v}")
 
-        # FIXME: return array of packets
-        return []
+        # Get all costs in table
+        costs = []
+        for i in range(self.number_of_entities):
+            if i == self.index:
+                costs.append(0)  # cost to self is 0
+            else:
+                costs.append(self.neighbor_cost_map[i])  # cost to neighbor
+
+        # Send packets to direct neighbors
+        packets = []
+        for k in self.neighbor_cost_map.keys():
+            packets.append(Packet(destination=k, costs=costs))
+        return packets
 
     def update(self, pkt):
         '''
@@ -89,9 +104,9 @@ class Entity:
         '''
         source = pkt.get_source()
         for destination, cost in enumerate(pkt.get_costs()):
-            pass # FIXME: do some sort of update
+            pass # FIXME part 1: do some sort of update
 
-        # FIXME: return array of packets to send to neighbors for needed updates
+        # FIXME part 1: return array of packets to send to neighbors for needed updates
         return []
 
     def periodic_update(self):
