@@ -571,7 +571,7 @@ TESTS = [
         ],
     },
     {
-        "label": "network2 + remove link + periodic updates",
+        "label": "network2, then remove link, then periodic updates",
         "type": "remove-link",
         "links": [
             [(1, 1), (3, 5), (5, 3)], # E0

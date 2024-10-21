@@ -108,17 +108,33 @@ class Entity:
 
         updated = False
         for destination, cost in enumerate(pkt.get_costs()):
+            # print(f"- Got: From = {source}, To = {destination}, Cost = {cost}")
+            # Check for removal
+            # Path to node through gateway is now infinitely long
+            if self.next_hop_table[destination] == source and cost == math.inf:
+                # print("- Link went down")
+                self.cost_table[destination] = math.inf
+                self.next_hop_table[destination] = None
+                updated = True
+                continue
+
+            # TODO update for removal
+
             # Calculate path cost
             # print(f"- Got: From = {source}, To = {destination}, Cost = {cost}")
             old_path_cost = self.cost_table[destination]
             new_path_cost = self.neighbor_cost_map[source] + cost
             # print(f"- Old = {old_path_cost}, New = {new_path_cost}")
+            # if cost == math.inf and old_path_cost != math.inf:
+            #     print(f"Infinity for {destination}")
 
             # Update routing table
             if new_path_cost < old_path_cost:
                 self.cost_table[destination] = new_path_cost
                 self.next_hop_table[destination] = source
                 updated = True
+
+        # print(f"- Updated Costs = {self.get_all_costs()}")
 
         # Send packets to direct neighbors if updates triggered
         if not updated:
@@ -156,7 +172,7 @@ class Entity:
         sent from the entity to neighboring entites (if warranted by
         adding the new link).
         '''
-        print(f"Added {neighbor_index} to {self.index} with cost {link_cost}")
+        # print(f"Added {neighbor_index} to {self.index} with cost {link_cost}")
         self.neighbor_cost_map[neighbor_index] = link_cost
 
         # Check whether to update path
@@ -194,11 +210,20 @@ class Entity:
         - `neighbor_index`:  The zero-based index of the new neighbor.
 
         Return Value: This function should return an array of `Packet`s to be
-        sent from the entity to neighboring entites if there were changes to
+        sent from the entity to neighboring entities if there were changes to
         this node's routing table.
         '''
+        print(f"Removed {neighbor_index} from {self.index}")
         del self.neighbor_cost_map[neighbor_index]
-        return []
+
+        # Delete routes going through removed link
+        for i in range(self.number_of_entities):
+            if self.next_hop_table[i] == neighbor_index:
+                self.cost_table[i] = math.inf
+                self.next_hop_table[i] = None
+
+        # print(f"- Costs = {self.get_all_costs()}")
+        return self.get_update_packets()
 
 
     def forward_next_hop(self, destination):
@@ -257,10 +282,10 @@ class Entity:
             # print(f"- To: {k}, From: {self.index}")
             costs_to_send = [cost for _, cost in cost_tuples]
 
-            for i in range(self.number_of_entities):
-                hop, dest = cost_tuples[i]
-                if hop == k:  # split horizon: avoid trivial loop
-                    costs_to_send[i] = math.inf
+            # for i in range(self.number_of_entities):
+            #     hop, dest = cost_tuples[i]
+            #     if hop == k:  # split horizon: avoid trivial loop
+            #         costs_to_send[i] = math.inf
 
             # print(f"- Sent Costs = {costs_to_send}")
             packets.append(Packet(destination=k, costs=costs_to_send))
