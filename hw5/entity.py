@@ -71,7 +71,7 @@ class Entity:
         Return Value: This function should return an array of `Packet`s to be
         sent from this entity (if any) to neighboring entities.
         '''
-        print(f"Self: {self.index}")
+        # print(f"Self: {self.index}")
 
         # Set own entry
         self.cost_table[self.index] = 0
@@ -86,7 +86,7 @@ class Entity:
 
         # Get all costs in table
         costs = [cost for _, cost in self.get_all_costs()]
-        print(f"- Initial Costs = {costs}")
+        # print(f"- Initial Costs = {costs}")
 
         # Send packets to direct neighbors
         packets = []
@@ -106,6 +106,7 @@ class Entity:
         '''
         source = pkt.get_source()
 
+        updated = False
         for destination, cost in enumerate(pkt.get_costs()):
             # Calculate path cost
             # print(f"- Got: From = {source}, To = {destination}, Cost = {cost}")
@@ -117,9 +118,32 @@ class Entity:
             if new_path_cost < old_path_cost:
                 self.cost_table[destination] = new_path_cost
                 self.next_hop_table[destination] = source
+                updated = True
 
-        # FIXME part 1: return array of packets to send to neighbors for needed updates
-        return []
+        # Get all costs in table
+        cost_tuples = self.get_all_costs()
+        # costs = [cost for _, cost in cost_tuples]
+        # print(f"- Updated Costs = {costs}")
+
+        # Don't send packets if no updates
+        if not updated:
+            return []
+
+        # Send triggered updates to direct neighbors
+        packets = []
+        for k in self.neighbor_cost_map.keys():
+            # print(f"- To: {k}, From: {self.index}")
+            costs_to_send = [cost for _, cost in cost_tuples]
+
+            for i in range(self.number_of_entities):
+                hop, dest = cost_tuples[i]
+                if hop == k:  # split horizon: avoid trivial loop
+                    # print("- Trivial loop detected")
+                    costs_to_send[i] = math.inf
+
+            # print(f"- Sent Costs = {costs_to_send}")
+            packets.append(Packet(destination=k, costs=costs_to_send))
+        return packets
 
     def periodic_update(self):
         '''
