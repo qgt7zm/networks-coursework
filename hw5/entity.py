@@ -120,30 +120,11 @@ class Entity:
                 self.next_hop_table[destination] = source
                 updated = True
 
-        # Get all costs in table
-        cost_tuples = self.get_all_costs()
-        # costs = [cost for _, cost in cost_tuples]
-        # print(f"- Updated Costs = {costs}")
-
-        # Don't send packets if no updates
+        # Send packets to direct neighbors if updates triggered
         if not updated:
             return []
-
-        # Send triggered updates to direct neighbors
-        packets = []
-        for k in self.neighbor_cost_map.keys():
-            # print(f"- To: {k}, From: {self.index}")
-            costs_to_send = [cost for _, cost in cost_tuples]
-
-            for i in range(self.number_of_entities):
-                hop, dest = cost_tuples[i]
-                if hop == k:  # split horizon: avoid trivial loop
-                    # print("- Trivial loop detected")
-                    costs_to_send[i] = math.inf
-
-            # print(f"- Sent Costs = {costs_to_send}")
-            packets.append(Packet(destination=k, costs=costs_to_send))
-        return packets
+        else:
+            return self.get_update_packets()
 
     def periodic_update(self):
         '''
@@ -155,7 +136,7 @@ class Entity:
         to neighboring entities. Unlike other methods, this should send updates even when
         they do not appear necessary due to recent routing table changes.
         '''
-        return []
+        return self.get_update_packets()
 
     def add_neighbor(self, neighbor_index, link_cost):
         '''
@@ -175,8 +156,29 @@ class Entity:
         sent from the entity to neighboring entites (if warranted by
         adding the new link).
         '''
+        print(f"Added {neighbor_index} to {self.index} with cost {link_cost}")
         self.neighbor_cost_map[neighbor_index] = link_cost
-        return []
+
+        # Check whether to update path
+        updated = False
+
+        # Calculate path cost
+        # print(f"- Got: From = {source}, To = {destination}, Cost = {cost}")
+        old_path_cost = self.cost_table[neighbor_index]
+        new_path_cost = link_cost
+        # print(f"- Old = {old_path_cost}, New = {new_path_cost}")
+
+        # Update routing table
+        if new_path_cost < old_path_cost:
+            self.cost_table[neighbor_index] = new_path_cost
+            self.next_hop_table[neighbor_index] = neighbor_index
+            updated = True
+
+        # Send packets to direct neighbors if updates triggered
+        if not updated:
+            return []
+        else:
+            return self.get_update_packets()
 
     def delete_neighbor(self, neighbor_index):
         '''
@@ -195,7 +197,7 @@ class Entity:
         sent from the entity to neighboring entites if there were changes to
         this node's routing table.
         '''
-        del self.neighbor_cost_map
+        del self.neighbor_cost_map[neighbor_index]
         return []
 
 
@@ -238,3 +240,28 @@ class Entity:
             next_hop = self.forward_next_hop(index)
             array_of_tuples.append((next_hop, self.cost_table[index]))
         return array_of_tuples
+
+    def get_update_packets(self):
+        '''
+        Send triggered updates to all neighbors, implementing split horizon
+        with poison reverse to avoid loops.
+        '''
+        # Get all costs in table
+        cost_tuples = self.get_all_costs()
+        # costs = [cost for _, cost in cost_tuples]
+        # print(f"- Updated Costs = {costs}")
+
+        # Get list of packets
+        packets = []
+        for k in self.neighbor_cost_map.keys():
+            # print(f"- To: {k}, From: {self.index}")
+            costs_to_send = [cost for _, cost in cost_tuples]
+
+            for i in range(self.number_of_entities):
+                hop, dest = cost_tuples[i]
+                if hop == k:  # split horizon: avoid trivial loop
+                    costs_to_send[i] = math.inf
+
+            # print(f"- Sent Costs = {costs_to_send}")
+            packets.append(Packet(destination=k, costs=costs_to_send))
+        return packets
