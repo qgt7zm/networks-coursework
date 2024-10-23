@@ -186,7 +186,7 @@ class NetworkSimulator:
         print('E{} | Cost | Next Hop'.format(entity_index, ))
         print('---+------+---------')
         for i in range(len(self.entities)):
-            print('{}  | {:>4} | {:>8}'.format(i, final_costs[i][1], final_costs[i][0]))
+            print('{}  | {:>4} | {:>8}'.format(i, final_costs[i][1], str(final_costs[i][0])))
 
     def get_all_next_hops(self):
         return [

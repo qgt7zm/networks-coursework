@@ -19,7 +19,7 @@ import network_simulator
 #
 network0 = [
 	[(2, 7)],         # E0
-	[(0, 2)],         # E1
+	[(2, 2)],         # E1
 	[(0, 7), (1, 1 )],        # E2
 ]
 
