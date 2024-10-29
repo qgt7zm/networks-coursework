@@ -25,7 +25,7 @@ def send_request(request):
 
 
 def read_record_name(packet, start_byte):
-    hostname = ""
+    hostname = ''
     current_byte = start_byte
     while True:
         # First byte is label length
@@ -72,7 +72,7 @@ def read_response(packet):
     for i in range(question_count):
         # Read next question hostname
         hostname, current_byte = read_record_name(packet, current_byte)
-        print(hostname)
+        print(f"Question name = {hostname}")
 
         # Next 4 bytes are question type and class
         q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
@@ -88,10 +88,10 @@ def read_response(packet):
     names = []
     addresses = []
 
-    for i in range(resource_count):
+    for _ in range(resource_count):
         # Read next resource hostname
         hostname, current_byte = read_record_name(packet, current_byte)
-        print(hostname)
+        print(f"Resource name = {hostname}")
 
         # Next 8 bytes are question type, question class, and TTL
         q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
@@ -100,7 +100,31 @@ def read_response(packet):
 
         # Next 2 bytes is resource data length
         resource_length = int.from_bytes(packet[current_byte:current_byte + 2])
-        current_byte += 2 + resource_length
+        current_byte += 2
+        print(f"Resource length = {resource_length}")
+
+        # Parse resource data
+        resource_data = packet[current_byte:current_byte + resource_length]
+        current_byte += resource_length
+        print(f"Resource data = {resource_data}")
+
+        if q_type == 'ipv4':
+            ipv4_address = ''
+            for i in range(4):
+                # Get 8-bit decimal segment
+                ipv4_address += str(resource_data[i]) + '.'
+            ipv4_address = ipv4_address[:-1]
+            addresses.append(ipv4_address)
+            print(f"IPv4 = {ipv4_address}")
+        elif q_type == 'ipv6':
+            ipv6_address = ''
+            for i in range(8):
+                # Get 16-bit padded hex segment
+                ipv6_segment = int.from_bytes(resource_data[2 * i: 2 * (i + 1)])
+                ipv6_address += f'{ipv6_segment:04x}' + ':'
+            ipv6_address = ipv6_address[:-1]
+            addresses.append(ipv6_address)
+            print(f"IPv6 = {ipv6_address}")
 
     # Create output
     output_dict = {}
@@ -114,7 +138,7 @@ def read_response(packet):
     else:
         output_dict['kind'] = 'next-server'  # No addresses or CNAMEs found
         output_dict['next-server-names'] = []
-        output_dict['next-server-addresses'] = addresses
+        output_dict['next-server-addresses'] = []
 
     return output_dict
 
