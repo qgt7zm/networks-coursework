@@ -24,7 +24,7 @@ def send_request(request):
     pass
 
 
-def read_record_name(packet, start_byte):
+def read_hostname(packet, start_byte):
     hostname = ''
     current_byte = start_byte
     while True:
@@ -38,7 +38,7 @@ def read_record_name(packet, start_byte):
         label = packet[current_byte:current_byte + label_length].decode('utf-8')
         hostname += label + '.'
         current_byte += label_length
-    return hostname, current_byte
+    return hostname[:-1], current_byte
 
 
 def read_response(packet):
@@ -66,12 +66,10 @@ def read_response(packet):
 
     # Read question records
     current_byte = 12
-    found_address = False  # No addresses found
-    found_cname = False  # No CNAMEs found
 
     for i in range(question_count):
         # Read next question hostname
-        hostname, current_byte = read_record_name(packet, current_byte)
+        hostname, current_byte = read_hostname(packet, current_byte)
         print(f"Question name = {hostname}")
 
         # Next 4 bytes are question type and class
@@ -79,24 +77,26 @@ def read_response(packet):
         q_type = QTYPES[q_type_val]
         current_byte += 4
 
-        if q_type.startswith('ip'):
-            found_address = True
-        elif q_type == 'cname':
-            found_cname = True
-
     # Read resource records
     names = []
     addresses = []
+    found_address = False  # No addresses found
+    found_cname = False  # No CNAMEs found
 
     for _ in range(resource_count):
         # Read next resource hostname
-        hostname, current_byte = read_record_name(packet, current_byte)
+        hostname, current_byte = read_hostname(packet, current_byte)
         print(f"Resource name = {hostname}")
 
         # Next 8 bytes are question type, question class, and TTL
         q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
         q_type = QTYPES[q_type_val]
         current_byte += 8
+
+        if q_type.startswith('ip'):
+            found_address = True
+        elif q_type == 'cname':
+            found_cname = True
 
         # Next 2 bytes is resource data length
         resource_length = int.from_bytes(packet[current_byte:current_byte + 2])
@@ -125,6 +125,13 @@ def read_response(packet):
             ipv6_address = ipv6_address[:-1]
             addresses.append(ipv6_address)
             print(f"IPv6 = {ipv6_address}")
+        elif q_type == 'cname':
+            resource_cname, current_byte = read_hostname(packet, current_byte - resource_length)
+            names.append(resource_cname)
+            print(f"CNAME = {resource_cname}")
+        elif q_type == 'ns':
+            resource_ns, current_byte = read_hostname(packet, current_byte - resource_length)
+            print(f"NS = {resource_ns}")
 
     # Create output
     output_dict = {}
@@ -134,7 +141,7 @@ def read_response(packet):
         output_dict['addresses'] = addresses
     elif found_cname:
         output_dict['kind'] = 'next-name'  # CNAMEs and no addresses found
-        output_dict['next-name'] = ''
+        output_dict['next-name'] = names[-1]
     else:
         output_dict['kind'] = 'next-server'  # No addresses or CNAMEs found
         output_dict['next-server-names'] = []
