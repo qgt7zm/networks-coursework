@@ -2,6 +2,7 @@ import argparse
 import json
 import struct
 import socket
+import sys
 
 
 def parse_args():
@@ -22,6 +23,24 @@ def send_request(request):
 
 
 def read_response(response):
+    # First two bytes is length
+    length = sys.stdin.buffer.read(2)
+    length = 128 * length[0] + length[1]
+    print(f"length = {length}")
+
+    # Read remaining data
+    packet = sys.stdin.buffer.read(length)
+
+    # Second half of fourth byte is reply code
+    print(f"packet = {packet}")
+    reply_code = packet[3] & 0b1111
+
+    if reply_code != 0:
+        print("Error")
+        return {'kind': 'error'}
+
+    print(f"Reply code OK")
+
     return {
         'kind': 'error',
         'addresses': [],
