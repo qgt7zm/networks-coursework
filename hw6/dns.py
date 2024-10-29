@@ -4,6 +4,8 @@ import struct
 import socket
 import sys
 
+QTYPES = {1: 'ipv4', 28: 'ipv6', 5: 'cname', 2: 'ns'}
+
 
 def parse_args():
     # Parse args
@@ -62,42 +64,59 @@ def read_response(packet):
     resource_count += int.from_bytes(packet[10:12])
     print(f"{resource_count} resources")
 
-    # Questions start after byte 13
+    # Read question records
     current_byte = 12
-    addresses = []
     found_address = False  # No addresses found
+    found_cname = False  # No CNAMEs found
 
     for i in range(question_count):
         # Read next question hostname
         hostname, current_byte = read_record_name(packet, current_byte)
+        print(hostname)
 
         # Next 4 bytes are question type and class
-        q_type = int.from_bytes(packet[current_byte:current_byte + 2])
-        # q_class = int.from_bytes(packet[current_byte + 2:current_byte + 4])
+        q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
+        q_type = QTYPES[q_type_val]
         current_byte += 4
 
-        # Add address if is IPv4 or IPv6
-        if q_type == 1 or q_type == 28:
+        if q_type.startswith('ip'):
             found_address = True
-            addresses.append(hostname)
-        # CNAME
-        elif q_type == 5:
-            pass
+        elif q_type == 'cname':
+            found_cname = True
 
-    # TODO read answers
+    # Read resource records
+    names = []
+    addresses = []
+
+    for i in range(resource_count):
+        # Read next resource hostname
+        hostname, current_byte = read_record_name(packet, current_byte)
+        print(hostname)
+
+        # Next 8 bytes are question type, question class, and TTL
+        q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
+        q_type = QTYPES[q_type_val]
+        current_byte += 8
+
+        # Next 2 bytes is resource data length
+        resource_length = int.from_bytes(packet[current_byte:current_byte + 2])
+        current_byte += 2 + resource_length
+
+    # Create output
+    output_dict = {}
 
     if found_address:
-        kind = 'address'
+        output_dict['kind'] = 'address'  # Addresses found
+        output_dict['addresses'] = addresses
+    elif found_cname:
+        output_dict['kind'] = 'next-name'  # CNAMEs and no addresses found
+        output_dict['next-name'] = ''
     else:
-        kind = 'next-name'
+        output_dict['kind'] = 'next-server'  # No addresses or CNAMEs found
+        output_dict['next-server-names'] = []
+        output_dict['next-server-addresses'] = addresses
 
-    return {
-        'kind': kind,
-        'addresses': addresses,
-        'next-name': '',
-        'next-server-names': [],
-        'next-server-addresses': []
-    }
+    return output_dict
 
 
 if __name__ == '__main__':
@@ -118,10 +137,10 @@ if __name__ == '__main__':
     elif args.process_response:
         # 2-byte prefix is length
         prefix = sys.stdin.buffer.read(2)
-        length = int.from_bytes(prefix)
+        packet_length = int.from_bytes(prefix)
 
         # Read remaining data
-        input_packet = sys.stdin.buffer.read(length)
+        input_packet = sys.stdin.buffer.read(packet_length)
         output = read_response(input_packet)
 
         # TODO print json output
