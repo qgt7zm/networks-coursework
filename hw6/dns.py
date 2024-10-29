@@ -23,26 +23,33 @@ def send_request(request):
 
 
 def read_response(response):
-    # First two bytes is length
-    length = sys.stdin.buffer.read(2)
-    length = 128 * length[0] + length[1]
-    print(f"length = {length}")
+    # 2-byte prefix is length
+    prefix = sys.stdin.buffer.read(2)
+    length = int.from_bytes(prefix)
 
     # Read remaining data
     packet = sys.stdin.buffer.read(length)
 
-    # Second half of fourth byte is reply code
+    # Bytes 1-2 are ID
+
+    # Second half of byte 4 is reply code
     print(f"packet = {packet}")
     reply_code = packet[3] & 0b1111
-
     if reply_code != 0:
-        print("Error")
         return {'kind': 'error'}
 
-    print(f"Reply code OK")
+    # Bytes 5-6 are question count
+    q_count = int.from_bytes(packet[4:6])
+    print(f"{q_count} questions")
+
+    # Bytes 7-12 are answer, NS, and AR count
+    a_count = int.from_bytes(packet[6:8])
+    a_count += int.from_bytes(packet[8:10])
+    a_count += int.from_bytes(packet[10:12])
+    print(f"{a_count} answers")
 
     return {
-        'kind': 'error',
+        'kind': 'address',
         'addresses': [],
         'next-name': '',
         'next-server-names': [],
