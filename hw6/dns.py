@@ -13,7 +13,22 @@ def parse_args():
     parser.add_argument('--port', type=int)  # port num
     parser.add_argument('--ipv4', action='store_true')
     parser.add_argument('--ipv6', action='store_true')
+    parser.add_argument('--process-response', action='store_true')  # output json
     return parser.parse_args()
+
+
+def send_request(request):
+    pass
+
+
+def read_response(response):
+    return {
+        'kind': 'error',
+        'addresses': [],
+        'next-name': '',
+        'next-server-names': [],
+        'next-server-addresses': []
+    }
 
 
 if __name__ == '__main__':
@@ -21,12 +36,20 @@ if __name__ == '__main__':
     args = parse_args()
 
     # Display args
-    print(f"hostname = {args.send_request}")
-    print(f"server = {args.server}")
-    print(f"port = {args.port}")
-    print(f"ipv4 = {args.ipv4}")
-    print(f"ipv6 = {args.ipv6}")
 
-    # TODO send DNS request
-    # TODO read DNS response
-    # TODO create output file
+    if args.send_request:
+        # TODO send DNS request
+        print("sending request")
+        print(f"hostname = {args.send_request}")
+        print(f"server = {args.server}")
+        print(f"port = {args.port}")
+        print(f"ipv4 = {args.ipv4}")
+        print(f"ipv6 = {args.ipv6}")
+        send_request("foo")
+    elif args.process_response:
+        # TODO read DNS response
+        print("reading input")
+        output = read_response("foo")
+
+        # TODO print json output
+        print(output)
