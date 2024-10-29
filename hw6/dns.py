@@ -46,10 +46,41 @@ def read_response(packet):
     print(f"{a_count} answers")
 
     # TODO read questions and answers
+    # Questions start after byte 13
+    current_byte = 12
+    addresses = []
+
+    for i in range(q_count):
+        hostname = ""
+
+        # Read next question hostname
+        while True:
+            # First byte is label length
+            label_length = packet[current_byte]
+            current_byte += 1
+            if label_length == 0:
+                break
+
+            # Read next label
+            label = packet[current_byte:current_byte + label_length].decode('utf-8')
+            hostname += label + '.'
+            current_byte += label_length
+
+        if len(hostname) > 0:
+            addresses.append(hostname)
+
+        # Next 4 bytes are question type and class
+        q_type = int.from_bytes(packet[current_byte:current_byte + 2])
+        q_class = int.from_bytes(packet[current_byte + 2:current_byte + 4])
+        current_byte += 4
+
+        print(hostname)
+        print(q_type)
+        print(q_class)
 
     return {
         'kind': 'address',
-        'addresses': [],
+        'addresses': addresses,
         'next-name': '',
         'next-server-names': [],
         'next-server-addresses': []
