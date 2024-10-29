@@ -24,7 +24,7 @@ def send_request(request):
     pass
 
 
-# Read response helpers
+## Read Response Helpers ##
 
 def read_hostname(packet, start_byte):
     hostname = ''
@@ -60,9 +60,30 @@ def read_ipv6_address(resource_data):
     return ipv6_address[:-1]
 
 
-# Read response method
+def read_record_data(resource_data, q_type: str, names: list, addresses: list, packet, current_byte: int):
+    if q_type == 'ipv4':
+        ipv4_address = read_ipv4_address(resource_data)
+        addresses.append(ipv4_address)
+        print(f"IPv4 = {ipv4_address}")
+    elif q_type == 'ipv6':
+        ipv6_address = read_ipv6_address(resource_data)
+        addresses.append(ipv6_address)
+        print(f"IPv6 = {ipv6_address}")
+    elif q_type == 'cname':
+        # Only used in answer
+        resource_cname, _ = read_hostname(packet, current_byte)
+        names.append(resource_cname)
+        print(f"CNAME = {resource_cname}")
+    elif q_type == 'ns':
+        # Only used in server
+        resource_ns, _ = read_hostname(packet, current_byte)
+        names.append(resource_ns)
+        print(f"NS name = {resource_ns}")
 
-def read_response(packet):
+
+## Read Response Method ##
+
+def read_response(packet) -> dict:
     # Bit 1 of byte 3 is response
     response_mode = packet[2] >> 7
     if response_mode != 1:
@@ -124,24 +145,11 @@ def read_response(packet):
 
         # Parse resource data
         resource_data = packet[current_byte:current_byte + resource_length]
-
-        if q_type == 'ipv4':
-            ipv4_address = read_ipv4_address(resource_data)
-            answer_addresses.append(ipv4_address)
-            print(f"IPv4 = {ipv4_address}")
-        elif q_type == 'ipv6':
-            ipv6_address = read_ipv6_address(resource_data)
-            answer_addresses.append(ipv6_address)
-            print(f"IPv6 = {ipv6_address}")
-        elif q_type == 'cname':
-            resource_cname, _ = read_hostname(packet, current_byte)
-            answer_names.append(resource_cname)
-            print(f"CNAME = {resource_cname}")
+        read_record_data(resource_data, q_type, answer_names, answer_addresses, packet, current_byte)
 
         current_byte += resource_length
 
     # Read server records
-    # TODO read separately
     server_names = []
     server_addresses = []
 
@@ -161,23 +169,11 @@ def read_response(packet):
 
         # Parse resource data
         resource_data = packet[current_byte:current_byte + resource_length]
-
-        if q_type == 'ipv4':
-            ipv4_address = read_ipv4_address(resource_data)
-            server_addresses.append(ipv4_address)
-            print(f"IPv4 = {ipv4_address}")
-        elif q_type == 'ipv6':
-            ipv6_address = read_ipv6_address(resource_data)
-            server_addresses.append(ipv6_address)
-            print(f"IPv6 = {ipv6_address}")
-        elif q_type == 'ns':
-            resource_cname, _ = read_hostname(packet, current_byte)
-            server_names.append(resource_cname)
-            print(f"NS name = {resource_cname}")
+        read_record_data(resource_data, q_type, server_names, server_addresses, packet, current_byte)
 
         current_byte += resource_length
 
-    # Create output
+    # Create output dictionary
     output_dict = {}
 
     if found_address:
@@ -193,6 +189,8 @@ def read_response(packet):
 
     return output_dict
 
+
+## Main Method ##
 
 if __name__ == '__main__':
     args = parse_args()
@@ -215,7 +213,7 @@ if __name__ == '__main__':
 
         # Read remaining data
         input_packet = sys.stdin.buffer.read(packet_length)
-        output = read_response(input_packet)
 
         # Print json output
+        output = read_response(input_packet)
         print(json.dumps(output, indent=4))
