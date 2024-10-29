@@ -22,6 +22,23 @@ def send_request(request):
     pass
 
 
+def read_record_name(packet, start_byte):
+    hostname = ""
+    current_byte = start_byte
+    while True:
+        # First byte is label length
+        label_length = packet[current_byte]
+        current_byte += 1
+        if label_length == 0:
+            break
+
+        # Read next label
+        label = packet[current_byte:current_byte + label_length].decode('utf-8')
+        hostname += label + '.'
+        current_byte += label_length
+    return hostname, current_byte
+
+
 def read_response(packet):
     # Bit 1 of byte 3 is response
     response_mode = packet[2] >> 7
@@ -36,50 +53,46 @@ def read_response(packet):
         return {'kind': 'error'}
 
     # Bytes 5-6 are question count
-    q_count = int.from_bytes(packet[4:6])
-    print(f"{q_count} questions")
+    question_count = int.from_bytes(packet[4:6])
+    print(f"{question_count} questions")
 
     # Bytes 7-12 are answer, NS, and AR count
-    a_count = int.from_bytes(packet[6:8])
-    a_count += int.from_bytes(packet[8:10])
-    a_count += int.from_bytes(packet[10:12])
-    print(f"{a_count} answers")
+    resource_count = int.from_bytes(packet[6:8])
+    resource_count += int.from_bytes(packet[8:10])
+    resource_count += int.from_bytes(packet[10:12])
+    print(f"{resource_count} resources")
 
-    # TODO read questions and answers
     # Questions start after byte 13
     current_byte = 12
     addresses = []
+    found_address = False  # No addresses found
 
-    for i in range(q_count):
-        hostname = ""
-
+    for i in range(question_count):
         # Read next question hostname
-        while True:
-            # First byte is label length
-            label_length = packet[current_byte]
-            current_byte += 1
-            if label_length == 0:
-                break
-
-            # Read next label
-            label = packet[current_byte:current_byte + label_length].decode('utf-8')
-            hostname += label + '.'
-            current_byte += label_length
-
-        if len(hostname) > 0:
-            addresses.append(hostname)
+        hostname, current_byte = read_record_name(packet, current_byte)
 
         # Next 4 bytes are question type and class
         q_type = int.from_bytes(packet[current_byte:current_byte + 2])
-        q_class = int.from_bytes(packet[current_byte + 2:current_byte + 4])
+        # q_class = int.from_bytes(packet[current_byte + 2:current_byte + 4])
         current_byte += 4
 
-        print(hostname)
-        print(q_type)
-        print(q_class)
+        # Add address if is IPv4 or IPv6
+        if q_type == 1 or q_type == 28:
+            found_address = True
+            addresses.append(hostname)
+        # CNAME
+        elif q_type == 5:
+            pass
+
+    # TODO read answers
+
+    if found_address:
+        kind = 'address'
+    else:
+        kind = 'next-name'
 
     return {
-        'kind': 'address',
+        'kind': kind,
         'addresses': addresses,
         'next-name': '',
         'next-server-names': [],
