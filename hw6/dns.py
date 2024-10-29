@@ -24,6 +24,8 @@ def send_request(request):
     pass
 
 
+# Read response helpers
+
 def read_hostname(packet, start_byte):
     hostname = ''
     current_byte = start_byte
@@ -40,6 +42,25 @@ def read_hostname(packet, start_byte):
         current_byte += label_length
     return hostname[:-1], current_byte
 
+
+def read_ipv4_address(resource_data):
+    ipv4_address = ''
+    for i in range(4):
+        # Get 8-bit decimal segment
+        ipv4_address += str(resource_data[i]) + '.'
+    return ipv4_address[:-1]
+
+
+def read_ipv6_address(resource_data):
+    ipv6_address = ''
+    for i in range(8):
+        # Get 16-bit padded hex segment
+        ipv6_segment = int.from_bytes(resource_data[2 * i: 2 * (i + 1)])
+        ipv6_address += f'{ipv6_segment:04x}' + ':'
+    return ipv6_address[:-1]
+
+
+# Read response method
 
 def read_response(packet):
     # Bit 1 of byte 3 is response
@@ -73,8 +94,6 @@ def read_response(packet):
         print(f"Question name = {hostname}")
 
         # Next 4 bytes are question type and class
-        q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
-        q_type = QTYPES[q_type_val]
         current_byte += 4
 
     # Read addresses and CNAMES from answers
@@ -87,7 +106,7 @@ def read_response(packet):
     for _ in range(answer_count):
         # Read next resource hostname
         hostname, current_byte = read_hostname(packet, current_byte)
-        print(f"Resource name = {hostname}")
+        print(f"Answer {hostname} with ", end='')
 
         # Next 8 bytes are question type, question class, and TTL
         q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
@@ -105,31 +124,21 @@ def read_response(packet):
 
         # Parse resource data
         resource_data = packet[current_byte:current_byte + resource_length]
-        current_byte += resource_length
 
         if q_type == 'ipv4':
-            ipv4_address = ''
-            for i in range(4):
-                # Get 8-bit decimal segment
-                ipv4_address += str(resource_data[i]) + '.'
-
-            ipv4_address = ipv4_address[:-1]
+            ipv4_address = read_ipv4_address(resource_data)
             answer_addresses.append(ipv4_address)
             print(f"IPv4 = {ipv4_address}")
         elif q_type == 'ipv6':
-            ipv6_address = ''
-            for i in range(8):
-                # Get 16-bit padded hex segment
-                ipv6_segment = int.from_bytes(resource_data[2 * i: 2 * (i + 1)])
-                ipv6_address += f'{ipv6_segment:04x}' + ':'
-
-            ipv6_address = ipv6_address[:-1]
+            ipv6_address = read_ipv6_address(resource_data)
             answer_addresses.append(ipv6_address)
             print(f"IPv6 = {ipv6_address}")
         elif q_type == 'cname':
-            resource_cname, current_byte = read_hostname(packet, current_byte - resource_length)
+            resource_cname, _ = read_hostname(packet, current_byte)
             answer_names.append(resource_cname)
             print(f"CNAME = {resource_cname}")
+
+        current_byte += resource_length
 
     # Read server records
     # TODO read separately
@@ -139,7 +148,7 @@ def read_response(packet):
     for _ in range(authority_count + additional_count):
         # Read next resource hostname
         hostname, current_byte = read_hostname(packet, current_byte)
-        print(f"Resource name = {hostname}")
+        print(f"Server {hostname} with ", end='')
 
         # Next 8 bytes are question type, question class, and TTL
         q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
@@ -152,31 +161,21 @@ def read_response(packet):
 
         # Parse resource data
         resource_data = packet[current_byte:current_byte + resource_length]
-        current_byte += resource_length
 
         if q_type == 'ipv4':
-            ipv4_address = ''
-            for i in range(4):
-                # Get 8-bit decimal segment
-                ipv4_address += str(resource_data[i]) + '.'
-
-            ipv4_address = ipv4_address[:-1]
+            ipv4_address = read_ipv4_address(resource_data)
             server_addresses.append(ipv4_address)
-            print(f"Server IPv4 = {ipv4_address}")
+            print(f"IPv4 = {ipv4_address}")
         elif q_type == 'ipv6':
-            ipv6_address = ''
-            for i in range(8):
-                # Get 16-bit padded hex segment
-                ipv6_segment = int.from_bytes(resource_data[2 * i: 2 * (i + 1)])
-                ipv6_address += f'{ipv6_segment:04x}' + ':'
-
-            ipv6_address = ipv6_address[:-1]
+            ipv6_address = read_ipv6_address(resource_data)
             server_addresses.append(ipv6_address)
-            print(f"Server IPv6 = {ipv6_address}")
+            print(f"IPv6 = {ipv6_address}")
         elif q_type == 'ns':
-            resource_cname, current_byte = read_hostname(packet, current_byte - resource_length)
+            resource_cname, _ = read_hostname(packet, current_byte)
             server_names.append(resource_cname)
-            print(f"NS Name = {resource_cname}")
+            print(f"NS name = {resource_cname}")
+
+        current_byte += resource_length
 
     # Create output
     output_dict = {}
@@ -196,7 +195,6 @@ def read_response(packet):
 
 
 if __name__ == '__main__':
-    print("Running dns.py")
     args = parse_args()
 
     # Display args
@@ -219,5 +217,5 @@ if __name__ == '__main__':
         input_packet = sys.stdin.buffer.read(packet_length)
         output = read_response(input_packet)
 
-        # TODO print json output
-        print(output)
+        # Print json output
+        print(json.dumps(output, indent=4))
