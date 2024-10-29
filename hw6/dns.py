@@ -22,20 +22,17 @@ def send_request(request):
     pass
 
 
-def read_response(response):
-    # 2-byte prefix is length
-    prefix = sys.stdin.buffer.read(2)
-    length = int.from_bytes(prefix)
+def read_response(packet):
+    # Bit 1 of byte 3 is response
+    response_mode = packet[2] >> 7
+    if response_mode != 1:
+        # Response mode should be 1
+        return {'kind': 'malformed'}
 
-    # Read remaining data
-    packet = sys.stdin.buffer.read(length)
-
-    # Bytes 1-2 are ID
-
-    # Second half of byte 4 is reply code
-    print(f"packet = {packet}")
+    # Bits 5-8 of byte 4 are reply code
     reply_code = packet[3] & 0b1111
     if reply_code != 0:
+        # Reply code should be 1
         return {'kind': 'error'}
 
     # Bytes 5-6 are question count
@@ -47,6 +44,8 @@ def read_response(response):
     a_count += int.from_bytes(packet[8:10])
     a_count += int.from_bytes(packet[10:12])
     print(f"{a_count} answers")
+
+    # TODO read questions and answers
 
     return {
         'kind': 'address',
@@ -73,9 +72,13 @@ if __name__ == '__main__':
         print(f"ipv6 = {args.ipv6}")
         send_request("foo")
     elif args.process_response:
-        # TODO read DNS response
-        print("reading input")
-        output = read_response("foo")
+        # 2-byte prefix is length
+        prefix = sys.stdin.buffer.read(2)
+        length = int.from_bytes(prefix)
+
+        # Read remaining data
+        input_packet = sys.stdin.buffer.read(length)
+        output = read_response(input_packet)
 
         # TODO print json output
         print(output)
