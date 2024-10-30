@@ -47,7 +47,7 @@ def create_request(hostname: str, code: int | None) -> bytes | None:
 
     # Bytes 1-2 are transaction ID
     transaction_id = [random.randint(0, 127) for _ in range(2)]
-    # print(f"ID = 0x{int.from_bytes(transaction_id):04x}")
+    # print(f"ID = 0x{int.from_bytes(transaction_id, 'big'):04x}")
     header = bytes(transaction_id)
 
     # Bytes 3-4 are flags
@@ -75,7 +75,7 @@ def create_request(hostname: str, code: int | None) -> bytes | None:
 
     # Add 4 bytes for question type and class
     # IPv4 or IPv6 and IN (1)
-    header += struct.pack('HH', code, 1)
+    header += struct.pack('>HH', code, 1)
 
     # for bit in header:
     #     print(f'{bit:02x} ', end='')
@@ -122,7 +122,7 @@ def read_record_data(resource_data, q_type: str, names: list, addresses: list, p
         ipv6_address = ''
         for i in range(8):
             # Get 16-bit padded hex segment
-            ipv6_segment = int.from_bytes(resource_data[2 * i: 2 * (i + 1)])
+            ipv6_segment = int.from_bytes(resource_data[2 * i: 2 * (i + 1)], 'big')
             ipv6_address += f'{ipv6_segment:04x}' + ':'
         ipv6_address = ipv6_address[:-1]
         addresses.append(ipv6_address)
@@ -155,13 +155,13 @@ def process_response(packet) -> str:
         return get_json_string({'kind': 'error'})
 
     # Bytes 5-6 are question count
-    question_count = int.from_bytes(packet[4:6])
+    question_count = int.from_bytes(packet[4:6], 'big')
     # print(f"{question_count} questions")
 
     # Bytes 7-12 are answer, NS, and AR count
-    answer_count = int.from_bytes(packet[6:8])
-    authority_count = int.from_bytes(packet[8:10])
-    additional_count = int.from_bytes(packet[10:12])
+    answer_count = int.from_bytes(packet[6:8], 'big')
+    authority_count = int.from_bytes(packet[8:10], 'big')
+    additional_count = int.from_bytes(packet[10:12], 'big')
     # print(f"{answer_count + authority_count + additional_count} resources")
 
     # Read question records
@@ -187,7 +187,7 @@ def process_response(packet) -> str:
         # print(f"Answer {hostname} with ", end='')
 
         # Next 8 bytes are question type, class, and TTL
-        q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
+        q_type_val = int.from_bytes(packet[current_byte:current_byte + 2], 'big')
         q_type = QTYPES[q_type_val]
         current_byte += 8
 
@@ -197,7 +197,7 @@ def process_response(packet) -> str:
             found_cname = True
 
         # Next 2 bytes is resource data length
-        resource_length = int.from_bytes(packet[current_byte:current_byte + 2])
+        resource_length = int.from_bytes(packet[current_byte:current_byte + 2], 'big')
         current_byte += 2
 
         # Parse resource data
@@ -216,12 +216,12 @@ def process_response(packet) -> str:
         # print(f"Server {hostname} with ", end='')
 
         # Next 8 bytes are question type, question class, and TTL
-        q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
+        q_type_val = int.from_bytes(packet[current_byte:current_byte + 2], 'big')
         q_type = QTYPES[q_type_val]
         current_byte += 8
 
         # Next 2 bytes is resource data length
-        resource_length = int.from_bytes(packet[current_byte:current_byte + 2])
+        resource_length = int.from_bytes(packet[current_byte:current_byte + 2], 'big')
         current_byte += 2
 
         # Parse resource data
@@ -260,7 +260,7 @@ if __name__ == '__main__':
         sys.stdout.buffer.write(request)
     elif args.process_response:
         # Read 2 bytes of length
-        packet_length = int.from_bytes(sys.stdin.buffer.read(2))
+        packet_length = int.from_bytes(sys.stdin.buffer.read(2), 'big')
 
         # Read remaining data
         input_packet = sys.stdin.buffer.read(packet_length)
@@ -277,7 +277,7 @@ if __name__ == '__main__':
         connection.sendall(request)
 
         # Receive the response
-        packet_length = int.from_bytes(connection.recv(2))
+        packet_length = int.from_bytes(connection.recv(2), 'big')
         response = connection.recv(packet_length)
         output = process_response(response)
         print(output)
