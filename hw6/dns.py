@@ -25,23 +25,22 @@ def parse_args():
 
 
 def create_request(hostname: str, server: str, port: int, code: int):
-    print(f"Hostname = {hostname}")
-    print(f"Server = {server}")
-    print(f"Port = {port}")
+    # print(f"Hostname = {hostname}")
+    # print(f"Server = {server}")
+    # print(f"Port = {port}")
 
     # Bytes 1-2 are transaction ID
     transaction_id = random.randint(0, 65535)
-    print(f"ID = {transaction_id:x}")
 
     # Bytes 3-4 are flags
     # Not a response, standard query, authoritative, no recursion
     header_flags = 0x0400
     header = struct.pack('>HH', transaction_id, header_flags)
 
-    # Bytes 5-12 are entry counts
+    # Bytes 5-12 are record counts
     # One question
-    entry_counts = [0, 1, 0, 0, 0, 0, 0, 0]
-    header += bytes(entry_counts)
+    record_counts = [0, 1, 0, 0, 0, 0, 0, 0]
+    header += bytes(record_counts)
 
     # Pack the domain labels
     labels = hostname.split('.')
@@ -56,13 +55,18 @@ def create_request(hostname: str, server: str, port: int, code: int):
         header += bytes(label_bytes)
     header += b'\x00'
 
-    # Add 2 bytes for question type and class
+    # Add 4 bytes for question type and class
     # IPv4 or IPv6 and IN (1)
-    header += struct.pack('>HH', code, 1)
+    header += struct.pack('HH', code, 1)
 
-    for bit in header:
-        print(f'{bit:02x} ', end='')
-    print()
+    # Encode 2 bytes for length
+    header_length = struct.pack('>H', len(header))
+
+    # for bit in header:
+    #     print(f'{bit:02x} ', end='')
+    # print()
+
+    sys.stdout.buffer.write(header_length + header)
 
 
 ## Read Response Helpers ##
@@ -240,10 +244,10 @@ if __name__ == '__main__':
         # TODO create DNS request
         if args.ipv4:
             query_code = IPV4_CODE
-            print("IPv4 mode")
+            # print("IPv4 mode")
         elif args.ipv6:
             query_code = IPV6_CODE
-            print("IPv6 mode")
+            # print("IPv6 mode")
         else:
             print("Invalid mode")
             exit(1)
