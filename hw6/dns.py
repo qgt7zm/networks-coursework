@@ -24,18 +24,34 @@ def parse_args():
     return parser.parse_args()
 
 
-def create_request(hostname: str, server: str, port: int, code: int):
-    # print(f"Hostname = {hostname}")
-    # print(f"Server = {server}")
-    # print(f"Port = {port}")
+## Create Request Method ##
 
+def create_request(program_args):
+    # print(f"Hostname = {program_args.create_request}")
+
+    if program_args.ipv4:
+        query_code = IPV4_CODE
+        # print("IPv4 mode")
+    elif program_args.ipv6:
+        query_code = IPV6_CODE
+        # print("IPv6 mode")
+    else:
+        print("Invalid mode")
+        return
+
+    _create_request(program_args.create_request, query_code)
+
+
+def _create_request(hostname: str, code: int):
     # Bytes 1-2 are transaction ID
-    transaction_id = random.randint(0, 65535)
+    transaction_id = [random.randint(0, 127) for _ in range(2)]
+    # print(f"ID = 0x{int.from_bytes(transaction_id):04x}")
+    header = bytes(transaction_id)
 
     # Bytes 3-4 are flags
     # Not a response, standard query, authoritative, no recursion
     header_flags = 0x0400
-    header = struct.pack('>HH', transaction_id, header_flags)
+    header += struct.pack('>H', header_flags)
 
     # Bytes 5-12 are record counts
     # One question
@@ -59,13 +75,12 @@ def create_request(hostname: str, server: str, port: int, code: int):
     # IPv4 or IPv6 and IN (1)
     header += struct.pack('HH', code, 1)
 
-    # Encode 2 bytes for length
-    header_length = struct.pack('>H', len(header))
-
     # for bit in header:
     #     print(f'{bit:02x} ', end='')
     # print()
 
+    # Encode 2 bytes for length
+    header_length = struct.pack('>H', len(header))
     sys.stdout.buffer.write(header_length + header)
 
 
@@ -88,7 +103,6 @@ def read_hostname(packet, start_byte):
     return hostname[:-1], current_byte
 
 
-def read_ipv4_address(resource_data):
     ipv4_address = ''
     for i in range(4):
         # Get 8-bit decimal segment
@@ -107,11 +121,9 @@ def read_ipv6_address(resource_data):
 
 def read_record_data(resource_data, q_type: str, names: list, addresses: list, packet, current_byte: int):
     if q_type == 'ipv4':
-        ipv4_address = read_ipv4_address(resource_data)
         addresses.append(ipv4_address)
         print(f"IPv4 = {ipv4_address}")
     elif q_type == 'ipv6':
-        ipv6_address = read_ipv6_address(resource_data)
         addresses.append(ipv6_address)
         print(f"IPv6 = {ipv6_address}")
     elif q_type == 'cname':
@@ -240,19 +252,7 @@ if __name__ == '__main__':
     args = parse_args()
 
     if args.create_request:
-        # Display args
-        # TODO create DNS request
-        if args.ipv4:
-            query_code = IPV4_CODE
-            # print("IPv4 mode")
-        elif args.ipv6:
-            query_code = IPV6_CODE
-            # print("IPv6 mode")
-        else:
-            print("Invalid mode")
-            exit(1)
-        create_request(args.create_request, args.server, args.port, query_code)
-        # TODO print request
+        create_request(args)
     elif args.process_response:
         # 2-byte prefix is length
         prefix = sys.stdin.buffer.read(2)
