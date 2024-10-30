@@ -24,25 +24,27 @@ def parse_args():
     return parser.parse_args()
 
 
+## Create Request Helpers ##
+
+def get_query_code(program_args) -> int | None:
+    if program_args.ipv4:
+        # print("IPv4 mode")
+        return IPV4_CODE
+    elif program_args.ipv6:
+        # print("IPv6 mode")
+        return IPV6_CODE
+    else:
+        # print("Invalid mode")
+        return None
+
+
 ## Create Request Method ##
 
-def create_request(program_args):
-    # print(f"Hostname = {program_args.create_request}")
+def create_request(hostname: str, code: int | None) -> bytes | None:
+    # print(f"Hostname = {hostname}")
+    if code is None:
+        return None
 
-    if program_args.ipv4:
-        query_code = IPV4_CODE
-        # print("IPv4 mode")
-    elif program_args.ipv6:
-        query_code = IPV6_CODE
-        # print("IPv6 mode")
-    else:
-        print("Invalid mode")
-        return
-
-    _create_request(program_args.create_request, query_code)
-
-
-def _create_request(hostname: str, code: int):
     # Bytes 1-2 are transaction ID
     transaction_id = [random.randint(0, 127) for _ in range(2)]
     # print(f"ID = 0x{int.from_bytes(transaction_id):04x}")
@@ -81,10 +83,14 @@ def _create_request(hostname: str, code: int):
 
     # Encode 2 bytes for length
     header_length = struct.pack('>H', len(header))
-    sys.stdout.buffer.write(header_length + header)
+    return header_length + header
 
 
 ## Read Response Helpers ##
+
+def get_json_string(output_dict: dict) -> str:
+    return json.dumps(output_dict, indent=4)
+
 
 def read_hostname(packet, start_byte):
     hostname = ''
@@ -103,55 +109,50 @@ def read_hostname(packet, start_byte):
     return hostname[:-1], current_byte
 
 
-    ipv4_address = ''
-    for i in range(4):
-        # Get 8-bit decimal segment
-        ipv4_address += str(resource_data[i]) + '.'
-    return ipv4_address[:-1]
-
-
-def read_ipv6_address(resource_data):
-    ipv6_address = ''
-    for i in range(8):
-        # Get 16-bit padded hex segment
-        ipv6_segment = int.from_bytes(resource_data[2 * i: 2 * (i + 1)])
-        ipv6_address += f'{ipv6_segment:04x}' + ':'
-    return ipv6_address[:-1]
-
-
 def read_record_data(resource_data, q_type: str, names: list, addresses: list, packet, current_byte: int):
     if q_type == 'ipv4':
+        ipv4_address = ''
+        for i in range(4):
+            # Get 8-bit decimal segment
+            ipv4_address += str(resource_data[i]) + '.'
+        ipv4_address = ipv4_address[:-1]
         addresses.append(ipv4_address)
-        print(f"IPv4 = {ipv4_address}")
+        # print(f"IPv4 = {ipv4_address}")
     elif q_type == 'ipv6':
+        ipv6_address = ''
+        for i in range(8):
+            # Get 16-bit padded hex segment
+            ipv6_segment = int.from_bytes(resource_data[2 * i: 2 * (i + 1)])
+            ipv6_address += f'{ipv6_segment:04x}' + ':'
+        ipv6_address = ipv6_address[:-1]
         addresses.append(ipv6_address)
-        print(f"IPv6 = {ipv6_address}")
+        # print(f"IPv6 = {ipv6_address}")
     elif q_type == 'cname':
         # Only used in answer
         resource_cname, _ = read_hostname(packet, current_byte)
         names.append(resource_cname)
-        print(f"CNAME = {resource_cname}")
+        # print(f"CNAME = {resource_cname}")
     elif q_type == 'ns':
         # Only used in server
         resource_ns, _ = read_hostname(packet, current_byte)
         names.append(resource_ns)
-        print(f"NS name = {resource_ns}")
+        # print(f"NS name = {resource_ns}")
 
 
-## Read Response Method ##
+## Process Response Method ##
 
-def read_response(packet) -> dict:
+def process_response(packet) -> str:
     # Bit 1 of byte 3 is response
     response_mode = packet[2] >> 7
     if response_mode != 1:
         # Response mode should be 1
-        return {'kind': 'malformed'}
+        return get_json_string({'kind': 'malformed'})
 
     # Bits 5-8 of byte 4 are reply code
     reply_code = packet[3] & 0b1111
     if reply_code != 0:
         # Reply code should be 1
-        return {'kind': 'error'}
+        return get_json_string({'kind': 'error'})
 
     # Bytes 5-6 are question count
     question_count = int.from_bytes(packet[4:6])
@@ -169,7 +170,7 @@ def read_response(packet) -> dict:
     for i in range(question_count):
         # Read next question hostname
         hostname, current_byte = read_hostname(packet, current_byte)
-        print(f"Question name = {hostname}")
+        # print(f"Question name = {hostname}")
 
         # Next 4 bytes are question type and class
         current_byte += 4
@@ -183,7 +184,7 @@ def read_response(packet) -> dict:
     for _ in range(answer_count):
         # Read next resource hostname
         hostname, current_byte = read_hostname(packet, current_byte)
-        print(f"Answer {hostname} with ", end='')
+        # print(f"Answer {hostname} with ", end='')
 
         # Next 8 bytes are question type, class, and TTL
         q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
@@ -212,7 +213,7 @@ def read_response(packet) -> dict:
     for _ in range(authority_count + additional_count):
         # Read next resource hostname
         hostname, current_byte = read_hostname(packet, current_byte)
-        print(f"Server {hostname} with ", end='')
+        # print(f"Server {hostname} with ", end='')
 
         # Next 8 bytes are question type, question class, and TTL
         q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
@@ -243,7 +244,8 @@ def read_response(packet) -> dict:
         output_dict['next-server-names'] = server_names
         output_dict['next-server-addresses'] = server_addresses
 
-    return output_dict
+    # Get json output
+    return get_json_string(output_dict)
 
 
 ## Main Method ##
@@ -252,17 +254,30 @@ if __name__ == '__main__':
     args = parse_args()
 
     if args.create_request:
-        create_request(args)
+        request = create_request(args.create_request, get_query_code(args))
+        if request is None:
+            exit(1)
+        sys.stdout.buffer.write(request)
     elif args.process_response:
-        # 2-byte prefix is length
-        prefix = sys.stdin.buffer.read(2)
-        packet_length = int.from_bytes(prefix)
+        # Read 2 bytes of length
+        packet_length = int.from_bytes(sys.stdin.buffer.read(2))
 
         # Read remaining data
         input_packet = sys.stdin.buffer.read(packet_length)
+        output = process_response(input_packet)
+        print(output)
+    elif args.send_request:
+        connection = socket.create_connection((args.server, args.port))
 
-        # Print json output
-        output = read_response(input_packet)
-        print(json.dumps(output, indent=4))
+        # Send the request
+        request = create_request(args.send_request, get_query_code(args))
+        if request is None:
+            exit(1)
+        # sys.stdout.buffer.write(request)
+        connection.sendall(request)
 
-    # TODO send request
+        # Receive the response
+        packet_length = int.from_bytes(connection.recv(2))
+        response = connection.recv(packet_length)
+        output = process_response(response)
+        print(output)
