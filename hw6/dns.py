@@ -1,17 +1,21 @@
 import argparse
 import json
+import random
 import struct
 import socket
 import sys
 
-QTYPES = {1: 'ipv4', 28: 'ipv6', 5: 'cname', 2: 'ns'}
+IPV4_CODE = 1
+IPV6_CODE = 28
+QTYPES = {IPV4_CODE: 'ipv4', IPV6_CODE: 'ipv6', 5: 'cname', 2: 'ns'}
 
 
 def parse_args():
     # Parse args
     # Source: https://stackoverflow.com/questions/20063/whats-the-best-way-to-parse-command-line-arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--send-request', type=str)  # hostname
+    parser.add_argument('--send-request', type=str)  # query hostname and read response
+    parser.add_argument('--create-request', type=str)  # make query for hostname
     parser.add_argument('--server', type=str)  # server IP
     parser.add_argument('--port', type=int)  # port num
     parser.add_argument('--ipv4', action='store_true')
@@ -20,8 +24,45 @@ def parse_args():
     return parser.parse_args()
 
 
-def send_request(request):
-    pass
+def create_request(hostname: str, server: str, port: int, code: int):
+    print(f"Hostname = {hostname}")
+    print(f"Server = {server}")
+    print(f"Port = {port}")
+
+    # Bytes 1-2 are transaction ID
+    transaction_id = random.randint(0, 65535)
+    print(f"ID = {transaction_id:x}")
+
+    # Bytes 3-4 are flags
+    # Not a response, standard query, authoritative, no recursion
+    header_flags = 0x0400
+    header = struct.pack('>HH', transaction_id, header_flags)
+
+    # Bytes 5-12 are entry counts
+    # One question
+    entry_counts = [0, 1, 0, 0, 0, 0, 0, 0]
+    header += bytes(entry_counts)
+
+    # Pack the domain labels
+    labels = hostname.split('.')
+    for label in labels:
+        label_length = len(label)
+        if label_length == 0:
+            continue
+        # Get char values
+        label_chars = [ord(ch) for ch in label]
+        label_bytes = bytes([label_length] + label_chars)
+        # print(label_bytes)
+        header += bytes(label_bytes)
+    header += b'\x00'
+
+    # Add 2 bytes for question type and class
+    # IPv4 or IPv6 and IN (1)
+    header += struct.pack('>HH', code, 1)
+
+    for bit in header:
+        print(f'{bit:02x} ', end='')
+    print()
 
 
 ## Read Response Helpers ##
@@ -118,7 +159,6 @@ def read_response(packet) -> dict:
         current_byte += 4
 
     # Read addresses and CNAMES from answers
-
     answer_names = []
     answer_addresses = []
     found_address = False  # No addresses found
@@ -129,7 +169,7 @@ def read_response(packet) -> dict:
         hostname, current_byte = read_hostname(packet, current_byte)
         print(f"Answer {hostname} with ", end='')
 
-        # Next 8 bytes are question type, question class, and TTL
+        # Next 8 bytes are question type, class, and TTL
         q_type_val = int.from_bytes(packet[current_byte:current_byte + 2])
         q_type = QTYPES[q_type_val]
         current_byte += 8
@@ -195,17 +235,20 @@ def read_response(packet) -> dict:
 if __name__ == '__main__':
     args = parse_args()
 
-    # Display args
-
-    if args.send_request:
-        # TODO send DNS request
-        print("sending request")
-        print(f"hostname = {args.send_request}")
-        print(f"server = {args.server}")
-        print(f"port = {args.port}")
-        print(f"ipv4 = {args.ipv4}")
-        print(f"ipv6 = {args.ipv6}")
-        send_request("foo")
+    if args.create_request:
+        # Display args
+        # TODO create DNS request
+        if args.ipv4:
+            query_code = IPV4_CODE
+            print("IPv4 mode")
+        elif args.ipv6:
+            query_code = IPV6_CODE
+            print("IPv6 mode")
+        else:
+            print("Invalid mode")
+            exit(1)
+        create_request(args.create_request, args.server, args.port, query_code)
+        # TODO print request
     elif args.process_response:
         # 2-byte prefix is length
         prefix = sys.stdin.buffer.read(2)
@@ -217,3 +260,5 @@ if __name__ == '__main__':
         # Print json output
         output = read_response(input_packet)
         print(json.dumps(output, indent=4))
+
+    # TODO send request
