@@ -1,34 +1,51 @@
 import argparse
 import socket
-import struct
+import sys
 
 
-def get_args() -> tuple:
+
+def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('ip', type=str)  # host IP address
     parser.add_argument('port', type=int)  # host port
-    args = parser.parse_args()
-    return args.ip, args.port
+    parser.add_argument('--request', action='store_true')  # sample request
+    return parser.parse_args()
 
 
 def process_request(request: bytes) -> dict:
-    print(request)
-    request_op = request[:request.find(b' ')].decode('utf-8')
+    request_str = request.decode('utf-8')
+    request_lines = request_str.split('\r\n')
 
-    if request_op == 'GET':
+    # Parse header
+    request_header = request_lines[0].split(' ')
+    request_method = request_header[0]
+    request_path = request_header[1]
+
+    response = {}
+
+    if request_method == 'GET':
         print("using GET")
+        print("path = " + request_path)
         # return 200 OK, 301 redirect, 404 or not found
-    elif request_op == 'HEAD':
+    elif request_method == 'HEAD':
         print("using HEAD")
+        print("path = " + request_path)
     else:
-        # return 405 method not allowed
-        print("invalid op")
+        print(f"invalid method: {request_method}")
+        response['code'] = 405  # method not allowed
 
-    return {}
+    return response
 
 
 if __name__ == '__main__':
-    ip, port = get_args()
+    args = get_args()
+    if args.request:
+        print("Parsing sample request")
+        client_request = sys.stdin.buffer.read()
+        process_request(client_request)
+        exit(0)
+
+    ip, port = args.ip, args.port
     print(f"Running webserver on http://{ip}:{port}")
 
     # Using IPv4 address
