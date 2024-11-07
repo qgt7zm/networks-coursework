@@ -2,6 +2,7 @@ import argparse
 import socket
 import sys
 
+from pathlib import Path
 
 
 def get_args():
@@ -10,6 +11,11 @@ def get_args():
     parser.add_argument('port', type=int)  # host port
     parser.add_argument('--request', action='store_true')  # sample request
     return parser.parse_args()
+
+
+def is_path_valid(request_path) -> bool:
+    path = Path('webroot' + request_path)
+    return path.is_file()
 
 
 def process_request(request: bytes) -> dict:
@@ -23,16 +29,24 @@ def process_request(request: bytes) -> dict:
 
     response = {}
 
-    if request_method == 'GET':
-        print("using GET")
-        print("path = " + request_path)
-        # return 200 OK, 301 redirect, 404 or not found
-    elif request_method == 'HEAD':
-        print("using HEAD")
-        print("path = " + request_path)
+    if request_method == 'GET' or request_method == 'HEAD':
+        print("using " + request_method)
+
+        if is_path_valid(request_path):
+            if 'redirect' in request_path:
+                response['code'] = 301  # moved permanently
+                # TODO find redirect target
+                print(f"redirect: {request_path}")
+            else:
+                response['code'] = 200  # OK
+                # TODO get file type
+                print(f"OK: {request_path}")
+        else:
+            response['code'] = 404  # not found
+            print(f"not found: {request_path}")
     else:
-        print(f"invalid method: {request_method}")
         response['code'] = 405  # method not allowed
+        print(f"invalid method: {request_method}")
 
     return response
 
