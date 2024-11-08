@@ -9,6 +9,7 @@ from pathlib import Path
 RESPONSE_CODES = {
     200: 'OK',
     301: 'Moved Permanently',
+    403: 'Not Authorized',
     404: 'Not Found',
     405: 'Method Not Allowed'
 }
@@ -79,6 +80,8 @@ def process_request(request: bytes) -> dict:
         response_data['body'] = f"Redirect: {request_path}"
         response_data['location'] = "/redirect-target.html"
         pass
+    elif response_code == 403:
+        response_data['body'] = f"Access denied: {request_path}"
     elif response_code == 404:
         response_data['body'] = f"File not found: {request_path}"
     elif response_code == 405:
