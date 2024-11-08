@@ -31,7 +31,7 @@ def get_response_code(method: str, path: str) -> int:
         if file_path.is_file():
             if not os.access(file_path, os.R_OK):
                 return 403  # not authorized
-            elif 'redirect' in path:
+            elif 'redirect-example' in path:
                 return 301  # moved permanently
             else:
                 return 200  # OK
@@ -72,9 +72,8 @@ def process_request(request: bytes) -> dict:
             with open(file_path, 'r') as file:
                 contents = file.read()
                 response_data['body'] = contents
-                response_data['length'] = len(contents)
         else:
-            response_data['body'] = None
+            response_data['body'] = ''
     elif response_code == 301:
         # Get the redirect target
         response_data['body'] = f"Redirect: {request_path}"
@@ -108,12 +107,13 @@ def create_response(response_data: dict) -> bytes:
         response_lines.append(f"Location: {response_data['location']}")
 
     # Check for message body
-    if response_data['body'] is not None:
+    content_len = len(response_data['body'])
+    if content_len > 0:
         # Check for file contents
-        if 'length' in response_data:
-            response_lines.append(f"Content-Length: {response_data['length']}")
+        if 'type' in response_data:
             response_lines.append(f"Content-Type: {response_data['type']}")
 
+        response_lines.append(f"Content-Length: {content_len}")
         response_lines.append(response_data['body'])
 
     response = '\r\n'.join(response_lines)
@@ -132,17 +132,22 @@ if __name__ == '__main__':
     ip, port = args.ip, args.port
     print(f"Running webserver on http://{ip}:{port}")
 
-    # Using IPv4 address
-    # HTTP uses TCP streams
+    # Create the socket for IPv4 and TCP streams
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((ip, port))
     server_socket.listen()
-    connection, address = server_socket.accept()
-    with connection:
+
+    running = True
+    while running:
+        connection, address = server_socket.accept()
         client_ip, client_port = address
         print(f"Received connection from {client_ip}:{client_port}")
 
         client_request = connection.recv(1000)
-        process_request(client_request)
+        data = process_request(client_request)
+        server_response = create_response(data)
+        connection.send(server_response)
+        connection.close()
+
     server_socket.close()
