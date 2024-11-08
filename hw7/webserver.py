@@ -1,9 +1,16 @@
 import argparse
+import datetime
 import socket
 import sys
 
 from pathlib import Path
 
+RESPONSE_CODES = {
+    200: 'OK',
+    301: 'Moved Permanently',
+    404: 'Not Found',
+    405 : 'Method Not Allowed'
+}
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -18,37 +25,68 @@ def is_path_valid(request_path) -> bool:
     return path.is_file()
 
 
+def get_response_code(method: str, path: str) -> int:
+    if method == 'GET' or method == 'HEAD':
+        print("method: " + method)
+
+        if is_path_valid(path):
+            if 'redirect' in path:
+                print(f"redirect: {path}")
+                return 301  # moved permanently
+            else:
+                print(f"OK: {path}")
+                return 200  # OK
+        else:
+            print(f"not found: {path}")
+            return 404  # not found
+    else:
+        print(f"invalid method: {method}")
+        return 405  # method not allowed
+
+
 def process_request(request: bytes) -> dict:
     request_str = request.decode('utf-8')
     request_lines = request_str.split('\r\n')
 
-    # Parse header
+    # Get response code from header
     request_header = request_lines[0].split(' ')
-    request_method = request_header[0]
-    request_path = request_header[1]
+    response_code = get_response_code(request_header[0], request_header[1])
 
-    response = {}
+    response_data = {
+        'code': response_code
+    }
 
-    if request_method == 'GET' or request_method == 'HEAD':
-        print("using " + request_method)
+    if response_code == 200:
+        # TODO get file type
+        pass
+    elif response_code == 301:
+        # TODO find redirect target
+        pass
+    elif response_code == 404:
+        pass
+    elif response_code == 504:
+        pass
 
-        if is_path_valid(request_path):
-            if 'redirect' in request_path:
-                response['code'] = 301  # moved permanently
-                # TODO find redirect target
-                print(f"redirect: {request_path}")
-            else:
-                response['code'] = 200  # OK
-                # TODO get file type
-                print(f"OK: {request_path}")
-        else:
-            response['code'] = 404  # not found
-            print(f"not found: {request_path}")
-    else:
-        response['code'] = 405  # method not allowed
-        print(f"invalid method: {request_method}")
+    return response_data
 
-    return response
+
+def create_response(response_data: dict) -> bytes:
+    code = response_data['code']
+    date = datetime.datetime.now()
+    date_fmt = date.strftime("%a, %d %b %Y %H:%M:%S %Z")
+
+    response_lines = [
+        f"HTTP/1.1 {code} {RESPONSE_CODES[code]}",
+        f"Date: {date_fmt}",
+        f"Server: Python",
+        f"Content-Length: 0",
+        f"Content-Type: text/html; charset=UTF-8",
+        "",
+        "",
+    ]
+    response = '\r\n'.join(response_lines)
+    print(response)
+    return bytes(response, 'utf-8')
 
 
 if __name__ == '__main__':
@@ -56,7 +94,8 @@ if __name__ == '__main__':
     if args.request:
         print("Parsing sample request")
         client_request = sys.stdin.buffer.read()
-        process_request(client_request)
+        response_data = process_request(client_request)
+        server_response = create_response(response_data)
         exit(0)
 
     ip, port = args.ip, args.port
