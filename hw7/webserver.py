@@ -70,13 +70,23 @@ def process_request(request: bytes) -> dict:
         file_ext = request_path[request_path.find('.') + 1:]
         if file_ext == 'html' or file_ext == 'htm':
             response_data['type'] = 'text/html'
-        else:
+            read_binary = False
+        elif file_ext == 'txt':
             response_data['type'] = 'text/plain'
+            read_binary = False
+        else:
+            response_data['type'] = 'text/other'
+            read_binary = True
 
         # Read the file
         file_path = Path('webroot' + request_path)
-        with open(file_path, 'r') as file:
-            contents = file.read()
+        if read_binary:
+            with open(file_path, 'rb') as file:
+                contents = file.read()
+        else:
+            with (open(file_path, 'r') as file):
+                contents = file.read()
+                # .decode('utf-8', errors='replace')
         response_data['length'] = len(contents)
 
         if request_method == 'GET':
@@ -103,32 +113,36 @@ def create_response(response_data: dict) -> bytes:
     date = datetime.datetime.now()
     date_fmt = date.strftime("%a, %d %b %Y %H:%M:%S %Z")
 
-    response_lines = [
+    header_lines = [
         f"HTTP/1.1 {code} {RESPONSE_CODES[code]}",
         f"Date: {date_fmt}",
         f"Server: Python",
-        # f"Last Modified: {date_fmt}",
-        # "Connection: Keep-Alive",
     ]
 
     # Check for redirect target
     if 'location' in response_data:
-        response_lines.append(f"Location: {response_data['location']}")
+        header_lines.append(f"Location: {response_data['location']}")
 
     # Check for file returned
     if 'type' in response_data:
         content_len = response_data['length']
-        response_lines.append(f"Content-Type: {response_data['type']}")
+        header_lines.append(f"Content-Type: {response_data['type']}")
     else:
         content_len = len(response_data['body'])
 
-    response_lines.append(f"Content-Length: {content_len}")
-    response_lines.append('')
-    response_lines.append(response_data['body'])
+    header_lines.append(f"Content-Length: {content_len}")
 
-    response = '\r\n'.join(response_lines)
-    print(response)
-    return bytes(response, 'utf-8')
+    response_header = '\r\n'.join(header_lines)
+    response_header += '\r\n' * 2
+    header_bytes = bytes(response_header, 'utf-8')
+
+    body_data = response_data['body']
+    if type(body_data) == bytes:
+        body_bytes = response_data['body']
+    else:
+        body_bytes = bytes(body_data, 'utf-8')
+
+    return header_bytes + body_bytes
 
 
 if __name__ == '__main__':
