@@ -148,17 +148,19 @@ if __name__ == '__main__':
     server_socket.bind((ip, port))
     server_socket.listen()
 
-    running = True
-    while running:
-        connection, address = server_socket.accept()
-        client_ip, client_port = address
-        print(f"Received connection from {client_ip}:{client_port}")
+    connection, address = server_socket.accept()
+    client_ip, client_port = address
+    print(f"Received connection from {client_ip}:{client_port}")
 
-        # TODO keep receiving instead of closing
+    while True:
         client_request = connection.recv(1024)
+        if not client_request:
+            print("Connected closed by client")
+            break
+
         data = process_request(client_request)
         server_response = create_response(data)
         connection.send(server_response)
-        connection.close()
 
+    connection.close()
     server_socket.close()
