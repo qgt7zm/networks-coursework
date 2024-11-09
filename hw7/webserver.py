@@ -136,6 +136,7 @@ def create_response(response_data: dict) -> bytes:
     response_header += '\r\n' * 2
     header_bytes = bytes(response_header, 'utf-8')
 
+    # Check for binary files
     body_data = response_data['body']
     if type(body_data) == bytes:
         body_bytes = response_data['body']
@@ -166,12 +167,26 @@ if __name__ == '__main__':
     client_ip, client_port = address
     print(f"Received connection from {client_ip}:{client_port}")
 
+    input_buffer = b''
     while True:
         client_request = connection.recv(1024)
-        if not client_request:
+        if not client_request and len(input_buffer) == 0:
+            # No more data to receive
             print("Connected closed by client")
             break
 
+        # Get first full request, store partial requests for later
+        input_buffer += client_request
+
+        buffer_split = input_buffer.split(b'\r\n\r\n', 1)
+        if len(buffer_split) == 1:
+            # Partial request received
+            continue
+
+        client_request = buffer_split[0]
+        input_buffer = buffer_split[1]
+
+        # Send response to client
         data = process_request(client_request)
         server_response = create_response(data)
         connection.send(server_response)
