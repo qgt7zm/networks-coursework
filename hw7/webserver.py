@@ -28,15 +28,22 @@ def get_response_code(method: str, path: str) -> int:
         print("Method: " + method)
 
         file_path = Path('webroot' + path)
-        if file_path.is_file():
+        filename = path[1:]
+
+        # Is a valid file not in a subdirectory
+        if file_path.is_file() and '/' not in filename:
             if not os.access(file_path, os.R_OK):
                 return 403  # not authorized
-            elif 'redirect-example' in path:
+            elif 'redirect-example' in filename:
                 return 301  # moved permanently
             else:
                 return 200  # OK
         else:
-            return 404  # not found
+            # Hard-coded example
+            if filename == 'redirect-example':
+                return 301
+            else:
+                return 404  # not found
     else:
         return 405  # method not allowed
 
@@ -59,19 +66,21 @@ def process_request(request: bytes) -> dict:
 
     # Create the response parameters
     if response_code == 200:
-        if request_method == 'GET':
-            # Get the file type
-            file_ext = request_path[request_path.find('.') + 1:]
-            if file_ext == 'html' or file_ext == 'htm':
-                response_data['type'] = 'text/html'
-            else:
-                response_data['type'] = 'text/plain'
+        # Get the file type
+        file_ext = request_path[request_path.find('.') + 1:]
+        if file_ext == 'html' or file_ext == 'htm':
+            response_data['type'] = 'text/html'
+        else:
+            response_data['type'] = 'text/plain'
 
-            # Read the file
-            file_path = Path('webroot' + request_path)
-            with open(file_path, 'r') as file:
-                contents = file.read()
-                response_data['body'] = contents
+        # Read the file
+        file_path = Path('webroot' + request_path)
+        with open(file_path, 'r') as file:
+            contents = file.read()
+        response_data['length'] = len(contents)
+
+        if request_method == 'GET':
+            response_data['body'] = contents
         else:
             response_data['body'] = ''
     elif response_code == 301:
@@ -106,15 +115,16 @@ def create_response(response_data: dict) -> bytes:
     if 'location' in response_data:
         response_lines.append(f"Location: {response_data['location']}")
 
-    # Check for message body
-    content_len = len(response_data['body'])
-    if content_len > 0:
-        # Check for file contents
-        if 'type' in response_data:
-            response_lines.append(f"Content-Type: {response_data['type']}")
+    # Check for file returned
+    if 'type' in response_data:
+        content_len = response_data['length']
+        response_lines.append(f"Content-Type: {response_data['type']}")
+    else:
+        content_len = len(response_data['body'])
 
-        response_lines.append(f"Content-Length: {content_len}")
-        response_lines.append(response_data['body'])
+    response_lines.append(f"Content-Length: {content_len}")
+    response_lines.append('')
+    response_lines.append(response_data['body'])
 
     response = '\r\n'.join(response_lines)
     print(response)
@@ -144,7 +154,8 @@ if __name__ == '__main__':
         client_ip, client_port = address
         print(f"Received connection from {client_ip}:{client_port}")
 
-        client_request = connection.recv(1000)
+        # TODO keep receiving instead of closing
+        client_request = connection.recv(1024)
         data = process_request(client_request)
         server_response = create_response(data)
         connection.send(server_response)
