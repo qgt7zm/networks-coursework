@@ -50,6 +50,9 @@ class YourMac(station.Station):
         channel = (self.id % NUM_CHANNELS) + 1  # 1-11
         print(f'{self.id}: using channel {channel}')
 
+        # Use binary search-like method to find correct power to reach tower
+        self.set_power(0.0, 20.0)
+
         while True:
             # Block until there is a packet ready to send
             pkt = self.wait_for_next_transmission()
@@ -57,14 +60,18 @@ class YourMac(station.Station):
             # Implement your MAC protocol here.
             # Try up to three times to send the packet successfully
             for i in range(0, 3):
-                response = self.send(pkt, 10.0, channel)
+                response = self.send(pkt, self.mid_power, channel)
 
                 # If we get an ACK, we are done with this packet. If all of our
                 # retries fail then we just consider this packet lost and wait
                 # for the next one.
                 if response == 'ACK':
+                    # Lower power for next transmission
+                    self.set_power(self.min_power, self.mid_power)
                     break
                 else:
+                    # Raise power for next transmission
+                    self.set_power(self.mid_power, self.max_power)
                     print(f'{self.id}: failed to send packet, will retry')
 
 
@@ -73,4 +80,13 @@ class YourMac(station.Station):
     def __init__(self, id, q_to_ap, q_to_station, interval):
         super().__init__(id, q_to_ap, q_to_station, interval)
 
+
+    def set_power(self, min_power: float, max_power: float):
+        if max_power - min_power <= 0.5:
+            # Don't adjust power if min-max difference is less than 0.5
+            return
+        self.min_power = min_power
+        self.max_power = max_power
+        self.mid_power = (self.min_power + self.max_power) / 2.0
+        print(f'{self.id}: using power {self.mid_power}')
 
