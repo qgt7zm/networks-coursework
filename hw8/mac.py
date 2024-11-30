@@ -1,8 +1,9 @@
 
 import random
-import time
 
 import station
+
+NUM_CHANNELS = 11
 
 
 class NullMac(station.Station):
@@ -45,15 +46,31 @@ class YourMac(station.Station):
     The sender should use up to two retransmissions if an ACK is not received.
     '''
     def run(self):
+        # Divide channels evenly among station IDs
+        channel = (self.id % NUM_CHANNELS) + 1  # 1-11
+        print(f'{self.id}: using channel {channel}')
+
         while True:
             # Block until there is a packet ready to send
             pkt = self.wait_for_next_transmission()
 
             # Implement your MAC protocol here.
+            # Try up to three times to send the packet successfully
+            for i in range(0, 3):
+                response = self.send(pkt, 10.0, channel)
+
+                # If we get an ACK, we are done with this packet. If all of our
+                # retries fail then we just consider this packet lost and wait
+                # for the next one.
+                if response == 'ACK':
+                    break
+                else:
+                    print(f'{self.id}: failed to send packet, will retry')
 
 
 
     # DO NOT CHANGE INIT
     def __init__(self, id, q_to_ap, q_to_station, interval):
         super().__init__(id, q_to_ap, q_to_station, interval)
+
 
