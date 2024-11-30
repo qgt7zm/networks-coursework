@@ -4,6 +4,8 @@ import random
 import station
 
 NUM_CHANNELS = 11
+MIN_POWER = 0.0
+MAX_POWER = 20.0
 
 
 class NullMac(station.Station):
@@ -51,11 +53,13 @@ class YourMac(station.Station):
         print(f'{self.id}: using channel {channel}')
 
         # Use binary search-like method to find correct power to reach tower
-        self.set_power(0.0, 20.0)
+        self.set_power(MIN_POWER, MAX_POWER)
 
         while True:
             # Block until there is a packet ready to send
             pkt = self.wait_for_next_transmission()
+
+            # TODO random transmit
 
             # Implement your MAC protocol here.
             # Try up to three times to send the packet successfully
@@ -70,9 +74,14 @@ class YourMac(station.Station):
                     self.set_power(self.min_power, self.mid_power)
                     break
                 else:
-                    # Raise power for next transmission
-                    self.set_power(self.mid_power, self.max_power)
-                    print(f'{self.id}: failed to send packet, will retry')
+                    if i == 2:
+                        # Converged on a power value too low, double power
+                        print(f'{self.id}: failed to send packet, dropping')
+                        self.set_power(self.min_power * 2.0, self.max_power * 2.0)
+                    else:
+                        # Raise power for next transmission
+                        print(f'{self.id}: failed to send packet, will retry')
+                        self.set_power(self.mid_power, self.max_power)
 
 
 
@@ -82,11 +91,11 @@ class YourMac(station.Station):
 
 
     def set_power(self, min_power: float, max_power: float):
-        if max_power - min_power <= 0.5:
-            # Don't adjust power if min-max difference is less than 0.5
+        if max_power - min_power <= 0.1:
+            # Don't adjust power if min-max difference is too small
             return
         self.min_power = min_power
-        self.max_power = max_power
+        self.max_power = min(max_power, MAX_POWER)
         self.mid_power = (self.min_power + self.max_power) / 2.0
         print(f'{self.id}: using power {self.mid_power}')
 
