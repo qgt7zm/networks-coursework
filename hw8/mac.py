@@ -1,11 +1,13 @@
-
 import random
 
 import station
+import simtime
 
 NUM_CHANNELS = 11
 MIN_POWER = 0.0
 MAX_POWER = 20.0
+SLOT_TIME = 0.1  # transmission delay is 10 ms, but 100 ms works better
+NUM_SLOTS = 10
 
 
 class NullMac(station.Station):
@@ -58,17 +60,18 @@ class YourMac(station.Station):
         while True:
             # Block until there is a packet ready to send
             pkt = self.wait_for_next_transmission()
+            slot = 0
+            num_slots = 1
 
-            # TODO random transmit
-
-            # Implement your MAC protocol here.
             # Try up to three times to send the packet successfully
             for i in range(0, 3):
-                response = self.send(pkt, self.mid_power, channel)
+                # Wait for given number of slots
+                if slot > 0:
+                    simtime.sleep(slot * SLOT_TIME)
 
-                # If we get an ACK, we are done with this packet. If all of our
-                # retries fail then we just consider this packet lost and wait
-                # for the next one.
+                # TODO keep power high enough to sense collision but not too high
+                # response = self.send(pkt, self.mid_power, channel)
+                response = self.send(pkt, 20.0, channel)
                 if response == 'ACK':
                     # Lower power for next transmission
                     self.set_power(self.min_power, self.mid_power)
@@ -83,6 +86,15 @@ class YourMac(station.Station):
                         print(f'{self.id}: failed to send packet, will retry')
                         self.set_power(self.mid_power, self.max_power)
 
+                    # If channel was busy, wait a random number of time slots
+                    busy = self.sense(channel)
+                    if busy:
+                        print(f'channel {channel} is busy')
+
+                        # Use exponential backoff to determine how many slots to choose from
+                        num_slots *= 2
+                        slot = random.randint(0, num_slots - 1)
+                        print(f'{self.id}: waiting {slot} slots')
 
 
     # DO NOT CHANGE INIT
@@ -91,7 +103,7 @@ class YourMac(station.Station):
 
 
     def set_power(self, min_power: float, max_power: float):
-        if max_power - min_power <= 0.1:
+        if max_power - min_power <= 0.5:
             # Don't adjust power if min-max difference is too small
             return
         self.min_power = min_power
