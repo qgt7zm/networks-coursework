@@ -4,8 +4,7 @@ import station
 import simtime
 
 NUM_CHANNELS = 11
-MIN_POWER = 0.0
-MAX_POWER = 20.0
+SEND_POWER = 20.0
 SLOT_TIME = 0.1  # transmission delay is 10 ms, but 100 ms works better
 NUM_SLOTS = 10
 
@@ -54,9 +53,6 @@ class YourMac(station.Station):
         channel = (self.id % NUM_CHANNELS) + 1  # 1-11
         print(f'{self.id}: using channel {channel}')
 
-        # Use binary search-like method to find correct power to reach tower
-        self.set_power(MIN_POWER, MAX_POWER)
-
         while True:
             # Block until there is a packet ready to send
             pkt = self.wait_for_next_transmission()
@@ -69,22 +65,16 @@ class YourMac(station.Station):
                 if slot > 0:
                     simtime.sleep(slot * SLOT_TIME)
 
-                # TODO keep power high enough to sense collision but not too high
-                # response = self.send(pkt, self.mid_power, channel)
-                response = self.send(pkt, 20.0, channel)
+                response = self.send(pkt, SEND_POWER, channel)
                 if response == 'ACK':
-                    # Lower power for next transmission
-                    self.set_power(self.min_power, self.mid_power)
                     break
                 else:
                     if i == 2:
                         # Converged on a power value too low, double power
                         print(f'{self.id}: failed to send packet, dropping')
-                        self.set_power(self.min_power * 2.0, self.max_power * 2.0)
                     else:
                         # Raise power for next transmission
                         print(f'{self.id}: failed to send packet, will retry')
-                        self.set_power(self.mid_power, self.max_power)
 
                     # If channel was busy, wait a random number of time slots
                     busy = self.sense(channel)
@@ -101,13 +91,4 @@ class YourMac(station.Station):
     def __init__(self, id, q_to_ap, q_to_station, interval):
         super().__init__(id, q_to_ap, q_to_station, interval)
 
-
-    def set_power(self, min_power: float, max_power: float):
-        if max_power - min_power <= 0.5:
-            # Don't adjust power if min-max difference is too small
-            return
-        self.min_power = min_power
-        self.max_power = min(max_power, MAX_POWER)
-        self.mid_power = (self.min_power + self.max_power) / 2.0
-        print(f'{self.id}: using power {self.mid_power}')
 
