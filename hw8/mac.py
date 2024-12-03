@@ -56,35 +56,30 @@ class YourMac(station.Station):
         while True:
             # Block until there is a packet ready to send
             pkt = self.wait_for_next_transmission()
-            slot = 0
             num_slots = 1
 
             # Try up to three times to send the packet successfully
             for i in range(0, 3):
-                # Wait for given number of slots
-                if slot > 0:
-                    simtime.sleep(slot * SLOT_TIME)
-
                 response = self.send(pkt, SEND_POWER, channel)
                 if response == 'ACK':
                     break
                 else:
                     if i == 2:
-                        # Converged on a power value too low, double power
                         print(f'{self.id}: failed to send packet, dropping')
                     else:
-                        # Raise power for next transmission
                         print(f'{self.id}: failed to send packet, will retry')
 
                     # If channel was busy, wait a random number of time slots
-                    busy = self.sense(channel)
-                    if busy:
-                        print(f'channel {channel} is busy')
+                    if self.sense(channel):
+                        print(f'channel {channel} was busy while sending')
 
                         # Use exponential backoff to determine how many slots to choose from
                         num_slots *= 2
                         slot = random.randint(0, num_slots - 1)
                         print(f'{self.id}: waiting {slot} slots')
+
+                        if slot > 0:
+                            simtime.sleep(slot * SLOT_TIME)
 
 
     # DO NOT CHANGE INIT
