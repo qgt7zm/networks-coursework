@@ -60,6 +60,11 @@ class YourMac(station.Station):
 
             # Try up to three times to send the packet successfully
             for i in range(0, 3):
+                # Collision avoidance: If channel is still busy, wait for one slot
+                while self.sense(channel):
+                    print(f'channel {channel} is busy before sending')
+                    simtime.sleep(SLOT_TIME)
+
                 response = self.send(pkt, SEND_POWER, channel)
                 if response == 'ACK':
                     break
@@ -69,21 +74,23 @@ class YourMac(station.Station):
                     else:
                         print(f'{self.id}: failed to send packet, will retry')
 
-                    # If channel was busy, wait a random number of time slots
+                    # Collision Detection: If channel was busy, wait before retransmitting
                     if self.sense(channel):
                         print(f'channel {channel} was busy while sending')
 
                         # Use exponential backoff to determine how many slots to choose from
                         num_slots *= 2
-                        slot = random.randint(0, num_slots - 1)
-                        print(f'{self.id}: waiting {slot} slots')
-
-                        if slot > 0:
-                            simtime.sleep(slot * SLOT_TIME)
-
+                        self.wait(num_slots)
 
     # DO NOT CHANGE INIT
     def __init__(self, id, q_to_ap, q_to_station, interval):
         super().__init__(id, q_to_ap, q_to_station, interval)
+
+    # Wait for the given number of time slots
+    def wait(self, num_slots):
+        slot = random.randint(0, num_slots - 1)
+        if slot > 0:
+            print(f'{self.id}: waiting {slot} slots')
+            simtime.sleep(slot * SLOT_TIME)
 
 
