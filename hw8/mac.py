@@ -1,3 +1,34 @@
+"""
+Eric Weng (qgt7zm)
+CS 4457
+Tue 12/3/24
+Wireless Assignment
+
+Methodology: The MAC implementation uses a combination of carrier-sense collision detection
+and and carrier-sense collision avoidance.
+
+1. First, channels were uniformly divided among stations by ID so that each channel would be
+expected to have the same frequency of collisions.
+
+2. Next, if the station detects a collision after an unsuccessful send, it waits a random
+number of slots before retransmitting. Every time such a collision is detected, the maximum
+number of slots doubles.
+
+3. Lastly, if the channel is still busy before sending, the station waits until the channel
+is no longer busy.
+
+4. Although the transmission delay was given to be 10 ms, a slot duration of 100 ms was found
+to work better. Time slots longer would slow down the protocol, while time slots shorter would
+cause too many collisions.
+
+5. Transmission power was set to 20 dB, as adjustments to transmission power did not appear
+to impact the frequency of collisions. However, power values too low often caused messages
+to not make it to the access point.
+
+Testing: The program was tested by running the program with 20 packets per second and 150
+packets received using simulated time.
+"""
+
 import random
 
 import station
@@ -6,7 +37,6 @@ import simtime
 NUM_CHANNELS = 11
 SEND_POWER = 20.0
 SLOT_TIME = 0.1  # transmission delay is 10 ms, but 100 ms works better
-NUM_SLOTS = 10
 
 
 class NullMac(station.Station):
