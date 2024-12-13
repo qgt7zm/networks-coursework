@@ -1,4 +1,4 @@
-"""Sandbox code for homeworks."""
+"""Sandbox code for HW 1."""
 
 import struct
 
